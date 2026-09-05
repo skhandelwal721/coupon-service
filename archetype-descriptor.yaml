@@ -1,0 +1,55 @@
+# Platform descriptor for coupon-service.
+name: coupon-service
+description: Promotional coupons and redemption reconciliation for Northwind Retail
+organization: northwind-retail
+owner: growth-platform
+tier: 1
+notifications:
+  email: growth-platform@northwind.example
+
+compute:
+  instanceType: c6i.xlarge
+  minInstances: 4
+  maxInstances: 12
+  multiAZ: true
+  healthcheck:
+    path: /healthcheck
+    interval: 10
+
+environmentVariables:
+  BILLING_SERVICE_BASE_URL: http://billing-service.prod.internal
+
+# Upstream services. billing-service is hard: a redemption we cannot reconcile against a
+# charge is a discount we cannot account for, so we hold instead of applying it.
+dependencies:
+  - service: billing-service
+    criticality: hard
+    reads:
+      - charge response — cardType, acquirerReference, subtotal, tax, total
+      - northwind.billing.charge.completed
+
+alarms:
+  - name: RedemptionErrorRate
+    metric: custom:coupon.redemption.5xx.rate
+    comparison: GreaterThanThreshold
+    threshold: 1
+    periods: 2
+    priority: P1
+  - name: RedemptionHeldRate
+    metric: custom:coupon.redemption.held.rate
+    comparison: GreaterThanThreshold
+    threshold: 5
+    periods: 2
+    priority: P1
+  - name: BillingChargeDeserializationFailures
+    metric: custom:coupon.billing.deserialize.failures
+    comparison: GreaterThanThreshold
+    threshold: 0
+    periods: 1
+    priority: P1
+  - name: UnmatchedChargebackRate
+    metric: custom:coupon.chargeback.unmatched.rate
+    comparison: GreaterThanThreshold
+    threshold: 2
+    periods: 3
+    priority: P2

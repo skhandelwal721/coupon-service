@@ -1,0 +1,40 @@
+spring:
+  application:
+    name: coupon-service
+  jackson:
+    deserialization:
+      # We generate BillingChargeView from billing-service's published schema, which is
+      # strict (additionalProperties: false). Failing on an unknown property is how we find
+      # out that the contract moved under us, instead of silently dropping a field that
+      # changes what a charge means.
+      fail-on-unknown-properties: true
+
+server:
+  tomcat:
+    threads:
+      max: 120
+
+# --------------------------------------------------------------------------------------
+# billing-service
+#
+# Hard dependency. Every redemption is validated against the charge that settled it, so a
+# redemption cannot complete while billing-service is unreachable — we hold rather than
+# apply a discount we cannot reconcile.
+# --------------------------------------------------------------------------------------
+clients:
+  billing:
+    baseUrl: ${BILLING_SERVICE_BASE_URL}
+    connectTimeout: 200ms
+    readTimeout: 800ms
+    # The per-invoice charge path. billing-service 4.12 adds POST /v1/charges and marks it
+    # preferred; we have not migrated because that path does not apply the pre-charge risk
+    # guard. See docs/dependencies.md.
+    chargePath: /v1/invoices/{invoiceId}/charge
+
+events:
+  billing:
+    chargeCompletedTopic: northwind.billing.charge.completed
+
+logging:
+  level:
+    com.northwind.coupon: INFO
