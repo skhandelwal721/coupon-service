@@ -1,0 +1,44 @@
+# Redemption API
+
+## `POST /v1/redemptions`
+
+Redeems a coupon against an invoice. Charges the invoice through `billing-service`, reconciles
+the charge, then books the discount.
+
+```json
+{
+  "couponCode": "NW-VISA-10",
+  "invoiceId": "inv-1001",
+  "cardNumber": "4111111111111111",
+  "currency": "GBP"
+}
+```
+
+### Response
+
+```json
+{
+  "redemptionId": "rdm_1c9f4a70",
+  "couponCode": "NW-VISA-10",
+  "chargeId": "chg_9f3b7c21",
+  "fundingNetwork": "VISA",
+  "discount": "10.00",
+  "status": "REDEEMED"
+}
+```
+
+`fundingNetwork` comes from `cardType` on the `billing-service` charge response. It is the
+network whose interchange rebate pays for the promotion, and it appears on the finance
+attribution feed.
+
+## Errors
+
+| Status | When |
+| --- | --- |
+| `404` | no such coupon |
+| `409` | the coupon is not funded on the network that settled the charge |
+| `422` | the charge does not satisfy `subtotal + tax == total`, so the redemption is held |
+| `500` | `cardType` on the charge was not a card network we recognise, or the charge response carried a field our pinned contract does not declare |
+
+The `422` and `500` cases both mean the upstream charge contract and our expectation of it have
+diverged. Neither has a safe default — see [`../dependencies.md`](../dependencies.md).
