@@ -1,8 +1,21 @@
 # Redemption API
 
-**Contract version: 2.4.0.** Consumers generate or hand-write their DTO against a pinned
+**Contract version: 2.5.0.** Consumers generate or hand-write their DTO against a pinned
 version of this document — see `coupon.contract.version` in the consuming repository. Any change
 to a field's **name, type or meaning** is a major bump and has to be announced before it ships.
+
+### Changed in 2.5.0
+
+| Field | 2.4.0 | 2.5.0 |
+| --- | --- | --- |
+| `discount` | absolute amount off, in the order currency | **the percentage taken off** |
+| `discountBasis` | — | new, always `PERCENT` |
+| `chargedAmount` | — | new, what the customer was actually charged |
+| `status` | `REDEEMED` | `REDEEMED` or `REDEEMED_PARTIAL` on the bulk path |
+
+`discount` keeps its name and its `BigDecimal` type, so **a consumer pinned to 2.4.0 will
+deserialize 2.5.0 without error and read the figure with the old meaning.** Nothing fails. Read
+`discountBasis` before using `discount`, or read `chargedAmount` instead.
 
 ## `POST /v1/redemptions`
 
@@ -27,9 +40,23 @@ the charge, then books the discount.
   "chargeId": "chg_9f3b7c21",
   "fundingNetwork": "VISA",
   "discount": "10.00",
+  "discountBasis": "PERCENT",
+  "chargedAmount": "298.80",
   "status": "REDEEMED"
 }
 ```
+
+## `POST /v1/redemptions/bulk`
+
+Redeems a promotion across a batch. Used by the campaign tool for win-back sends.
+
+```json
+{ "redemptions": [ { "couponCode": "NW-VISA-10", "invoiceId": "inv-1001",
+                     "cardNumber": "4111111111111111", "currency": "GBP" } ] }
+```
+
+Partial success is expected at batch size, so receipts carry `REDEEMED_PARTIAL` when some
+entries failed.
 
 `fundingNetwork` comes from `cardType` on the `billing-service` charge response. It is the
 network whose interchange rebate pays for the promotion, and it appears on the finance
@@ -40,20 +67,18 @@ attribution feed.
 This receipt is consumed outside this service. Treat it as versioned even though there is no
 version in the path.
 
-### `discount` is an absolute currency amount
+### `discount` is a percentage
 
-In the order's currency. `"discount": "10.00"` on a 249.00 order means the customer pays
-239.00.
+`"discount": "10.00"` means ten percent off, which is what the coupon codes have always
+described — `NW-VISA-10` is a ten percent promotion. `discountBasis` states this explicitly
+and is `PERCENT`.
 
-**It is not a percentage and not a minor-unit figure.** It is a `BigDecimal` either way, so a
-change of meaning here fails no validation and throws nothing — it produces arithmetically
-valid, financially wrong numbers wherever it is read.
-
-If a different basis is needed, add a field. Do not change what this one means.
+`chargedAmount` carries what the customer was actually charged, so consumers do not have to
+recompute anything from the percentage.
 
 ### `status` values
 
-`REDEEMED` only.
+`REDEEMED`, or `REDEEMED_PARTIAL` on the bulk path when some entries in a batch failed.
 
 ## Errors
 

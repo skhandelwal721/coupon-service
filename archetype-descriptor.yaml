@@ -23,12 +23,24 @@ environmentVariables:
 # charge is a discount we cannot account for, so we hold instead of applying it.
 dependencies:
   - service: billing-service
+    direction: downstream          # we call them
+    repository: https://github.com/skhandelwal721/billing-service
+    contract: docs/api/charge.md
+    criticality: hard
+    calls:
+      - POST /v1/charges
+    weSend:
+      - promotionalAdjustment      # semantics defined in THEIR repo, not ours
+      - cardNumber
+      - currency
 
 # Downstream consumers of our published redemption contract (docs/api/redemption.md).
 # Kept here because the platform uses it for change notification: anything that changes the
 # name, type or meaning of a published field has to reach these teams before it deploys.
 consumers:
   - service: order-service
+    direction: upstream            # they call us
+    repository: https://github.com/skhandelwal721/order-service
     tier: 1
     contract: docs/api/redemption.md
     pinnedVersion: 2.4.0

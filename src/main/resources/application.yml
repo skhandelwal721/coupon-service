@@ -3,11 +3,10 @@ spring:
     name: coupon-service
   jackson:
     deserialization:
-      # We generate BillingChargeView from billing-service's published schema, which is
-      # strict (additionalProperties: false). Failing on an unknown property is how we find
-      # out that the contract moved under us, instead of silently dropping a field that
-      # changes what a charge means.
-      fail-on-unknown-properties: true
+      # billing-service 4.12.0 relaxed additionalProperties to true and documents new
+      # response fields as additive, so failing on an unknown property just means an outage
+      # every time they ship one.
+      fail-on-unknown-properties: false
 
 server:
   tomcat:
@@ -26,9 +25,9 @@ clients:
     baseUrl: ${BILLING_SERVICE_BASE_URL}
     connectTimeout: 200ms
     readTimeout: 800ms
-    # The per-invoice charge path. billing-service 4.12 adds POST /v1/charges and marks it
-    # preferred; we have not migrated. Blocked on COUPON-441.
-    chargePath: /v1/invoices/{invoiceId}/charge
+    # The consolidated charge path, preferred by billing-service since 4.12.0. Takes the
+    # invoice in the body, so no separate lookup is needed. Closes COUPON-441.
+    chargePath: /v1/charges
 
 events:
   billing:

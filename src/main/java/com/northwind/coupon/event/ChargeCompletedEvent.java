@@ -11,16 +11,18 @@ import java.math.BigDecimal;
  * it as mirroring the charge response field for field. Strict for the same reason
  * {@code BillingChargeView} is strict: an unexpected field means the contract moved.
  */
-@JsonIgnoreProperties(ignoreUnknown = false)
+@JsonIgnoreProperties(ignoreUnknown = true)
 public record ChargeCompletedEvent(
         String eventType,
         String chargeId,
         String invoiceId,
         BigDecimal subtotal,
+        BigDecimal surcharge,
         BigDecimal tax,
         BigDecimal total,
         String currency,
         String cardType,
+        String cardNetwork,
         String acquirerReference,
         String status,
         String occurredAt

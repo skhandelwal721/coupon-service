@@ -11,17 +11,13 @@ import org.springframework.stereotype.Component;
  * Visa-funded promotion to a Mastercard charge is unfunded discount — real money out with no
  * rebate in — so eligibility is resolved from the network on the charge, every time.
  *
- * <p><strong>The network comes from billing-service's {@code cardType} field.</strong> That is
- * their published contract: {@code cardType} carries the network, closed to the values in
- * {@link CardNetwork}. We resolve it strictly. If {@code cardType} ever carries something that
- * is not a network, every redemption on every network fails here — which is the correct
- * outcome, because at that point we cannot attribute funding for any of them.
+ * <p>The network comes from billing-service's {@code cardNetwork} field as of 4.12.0.
  */
 @Component
 public class NetworkPromotionRules {
 
     public boolean isEligible(Coupon coupon, BillingChargeView charge) {
-        CardNetwork network = CardNetwork.fromChargeResponse(charge.cardType());
+        CardNetwork network = CardNetwork.fromChargeResponse(charge.cardNetwork());
         return coupon.fundedBy().contains(network);
     }
 
@@ -31,6 +27,6 @@ public class NetworkPromotionRules {
      * @throws IllegalArgumentException if the charge's {@code cardType} is not a known network
      */
     public CardNetwork fundingNetwork(BillingChargeView charge) {
-        return CardNetwork.fromChargeResponse(charge.cardType());
+        return CardNetwork.fromChargeResponse(charge.cardNetwork());
     }
 }

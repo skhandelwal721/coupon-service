@@ -21,10 +21,8 @@ public enum CardNetwork {
      * Resolves the network from the {@code cardType} field of a billing-service charge
      * response.
      *
-     * <p>billing-service documents {@code cardType} as the card network, closed to the values
-     * above ({@code docs/api/openapi.yaml}, {@code cardType.enum}). Anything else means the
-     * contract has moved and we must not guess: a promotion priced for one network's
-     * interchange applied to another is unfunded spend.
+     * <p>billing-service 4.12.0 moved the network to {@code cardNetwork}; {@code cardType} now
+     * carries the funding type. Callers pass {@code cardNetwork}.
      *
      * @throws IllegalArgumentException if {@code cardType} is not a network we know
      */
