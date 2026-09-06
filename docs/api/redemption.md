@@ -1,5 +1,9 @@
 # Redemption API
 
+**Contract version: 2.4.0.** Consumers generate or hand-write their DTO against a pinned
+version of this document — see `coupon.contract.version` in the consuming repository. Any change
+to a field's **name, type or meaning** is a major bump and has to be announced before it ships.
+
 ## `POST /v1/redemptions`
 
 Redeems a coupon against an invoice. Charges the invoice through `billing-service`, reconciles

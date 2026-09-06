@@ -23,6 +23,15 @@ environmentVariables:
 # charge is a discount we cannot account for, so we hold instead of applying it.
 dependencies:
   - service: billing-service
+
+# Downstream consumers of our published redemption contract (docs/api/redemption.md).
+# Kept here because the platform uses it for change notification: anything that changes the
+# name, type or meaning of a published field has to reach these teams before it deploys.
+consumers:
+  - service: order-service
+    tier: 1
+    contract: docs/api/redemption.md
+    pinnedVersion: 2.4.0
     criticality: hard
     reads:
       - charge response — cardType, acquirerReference, subtotal, tax, total
