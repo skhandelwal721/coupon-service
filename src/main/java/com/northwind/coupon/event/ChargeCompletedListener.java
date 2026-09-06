@@ -12,10 +12,7 @@ import org.springframework.stereotype.Component;
  *
  * <p>At-least-once delivery, keyed on {@code chargeId}.
  *
- * <p>Reads {@code cardType} as the card network, per billing-service's event contract
- * ({@code docs/api/events.md}, compatibility rule 1). The attribution feed is what finance
- * uses to invoice the networks for their share of promotional spend, so a charge we cannot
- * attribute is revenue we cannot bill for.
+ * <p>Reads {@code cardNetwork}, per billing-service's event contract as of 4.12.0.
  */
 @Component
 public class ChargeCompletedListener {
@@ -30,7 +27,7 @@ public class ChargeCompletedListener {
     }
 
     public void onChargeCompleted(ChargeCompletedEvent event) {
-        CardNetwork network = CardNetwork.fromChargeResponse(event.cardType());
+        CardNetwork network = CardNetwork.fromChargeResponse(event.cardNetwork());
 
         log.info("attributing promotional spend topic={} chargeId={} network={} total={}",
                 topic, event.chargeId(), network, event.total());

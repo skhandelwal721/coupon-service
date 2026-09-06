@@ -6,7 +6,7 @@ contract can see what it costs us, without reading our code.
 Every dependency below is on something `billing-service` publishes as stable in
 `docs/api/charge.md`, `docs/api/openapi.yaml` and `docs/api/events.md`.
 
-## 1. `cardType` is the card network
+## 1. `cardNetwork` is the card network
 
 **Where:** `CardNetwork.fromChargeResponse` → `NetworkPromotionRules.isEligible` /
 `fundingNetwork`, and `ChargeCompletedListener.onChargeCompleted`.
@@ -14,13 +14,13 @@ Every dependency below is on something `billing-service` publishes as stable in
 **Why we need it:** network promotions are funded by one network's interchange rebate. A
 Visa-funded coupon applied to a Mastercard charge is real money out with no rebate in.
 
-**If `cardType` stops carrying a network:** `CardNetwork.valueOf` throws, and it throws for
+**If `cardNetwork` stops carrying a network:** `CardNetwork.valueOf` throws, and it throws for
 **every network, not just a new one**. Visa and Mastercard redemptions fail alongside anything
 new. `POST /v1/redemptions` returns `500` and checkout stops for every customer using a
 coupon. There is no partial degradation here — the funding attribution feed also stops, so
 finance cannot invoice the networks for their share of promotional spend.
 
-**What would make this safe:** keep `cardType` carrying the network and put any new
+**What would make this safe:** keep `cardNetwork` carrying the network and put any new
 information in a new field. If the network has to move, tell us first — the migration is one
 line in `CardNetwork.fromChargeResponse`, but it has to land in our deploy **before** yours.
 
@@ -44,7 +44,7 @@ This is the quietest of the four failures and the most expensive to unwind.
 mapping in `ChargebackMatcher`; it is small, but we cannot write it against a prefix we have
 not been told about.
 
-## 3. `subtotal + tax == total`
+## 3. `subtotal + surcharge + tax == total`
 
 **Where:** `RedemptionAuditor.requireAccountable`.
 
@@ -59,37 +59,24 @@ alternative, but it is still a checkout failure for every affected charge.
 its own **and** has to be accounted for in the identity — and we need to pick up the new field
 before the change ships.
 
-## 4. The response shape is strict
+## 4. The response shape
 
-**Where:** `BillingChargeView`, `@JsonIgnoreProperties(ignoreUnknown = false)`, mirroring
-`additionalProperties: false` in `billing-service` `docs/api/openapi.yaml`.
+**Where:** `BillingChargeView`, `@JsonIgnoreProperties(ignoreUnknown = true)`.
 
-**Why we need it:** we generate the DTO from their schema. Strictness is how we find out that
-the contract moved, instead of silently dropping a field that changes what a charge means.
-
-**If a field is added to the response:** deserialization fails, `BillingClient.charge` throws,
-and every redemption fails with `500`. This one is total and immediate — it does not depend on
-the card network, the coupon, or the amount.
-
-**What would make this safe:** a contract version bump we can pick up on our own schedule. An
-additive field is not additive for a generated strict consumer.
+`billing-service` relaxed `additionalProperties` to `true` in 4.12.0 and documents new response
+fields as additive, so we are lenient too. A field we do not know about is ignored rather than
+failing the redemption.
 
 ## Endpoint choice
 
-We call `POST /v1/invoices/{invoiceId}/charge`.
-
-`billing-service` 4.12 introduces `POST /v1/charges` and marks it **preferred** in their
-README. We have deliberately not migrated: their `docs/runbooks/risk.md` states the pre-charge
-risk guard is a property of the entrypoint, and `ChargesController` does not call
-`ChargeRiskGuard.check`. Migrating would move our checkout traffic onto a path with no exposure
-ceiling and no fraud check. Tracked in COUPON-441 — blocked pending the guard being applied on
-the new endpoint.
+We call `POST /v1/charges`, the consolidated endpoint `billing-service` prefers since 4.12.0.
+It takes the invoice in the body, so we no longer need a separate lookup before charging — one
+round trip instead of two. COUPON-441 closed.
 
 ## Summary
 
 | Dependency | Failure mode | Customer impact | Detected by |
 | --- | --- | --- | --- |
-| Strict response shape | `500` on every redemption | checkout down for all coupon users | `BillingChargeDeserializationFailures` alarm |
-| `cardType` is a network | `500` on every redemption | checkout down for all coupon users | `RedemptionErrorRate` alarm |
-| `subtotal + tax == total` | `422`, redemption held | checkout fails for affected charges | `RedemptionHeldRate` alarm |
+| `cardNetwork` is a network | `500` on every redemption | checkout down for all coupon users | `RedemptionErrorRate` alarm |
+| `subtotal + surcharge + tax == total` | `422`, redemption held | checkout fails for affected charges | `RedemptionHeldRate` alarm |
 | `acquirerReference` prefix | silent — liability never reversed | none visible | `UnmatchedChargebackRate` alarm, eventually |

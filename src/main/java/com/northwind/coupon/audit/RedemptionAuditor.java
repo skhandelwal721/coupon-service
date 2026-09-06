@@ -35,15 +35,17 @@ public class RedemptionAuditor {
     }
 
     public void requireAccountable(BillingChargeView charge) {
-        BigDecimal expected = charge.subtotal().add(charge.tax());
+        BigDecimal expected = charge.subtotal().add(charge.surcharge()).add(charge.tax());
 
         if (expected.compareTo(charge.total()) != 0) {
             BigDecimal unexplained = charge.total().subtract(expected);
-            log.error("charge does not balance chargeId={} subtotal={} tax={} total={} unexplained={}",
-                    charge.chargeId(), charge.subtotal(), charge.tax(), charge.total(), unexplained);
+            log.error("charge does not balance chargeId={} subtotal={} surcharge={} tax={} total={} unexplained={}",
+                    charge.chargeId(), charge.subtotal(), charge.surcharge(), charge.tax(),
+                    charge.total(), unexplained);
 
             throw new UnaccountableChargeException(
                     "charge " + charge.chargeId() + " does not balance: subtotal " + charge.subtotal()
+                            + " + surcharge " + charge.surcharge()
                             + " + tax " + charge.tax() + " != total " + charge.total()
                             + " (" + unexplained + " unaccounted for)");
         }

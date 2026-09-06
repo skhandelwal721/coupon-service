@@ -75,8 +75,9 @@ public class RedemptionService {
         CardNetwork network = promotionRules.fundingNetwork(charge);
         String redemptionId = "rdm_" + UUID.randomUUID();
 
-        log.info("redeemed redemptionId={} couponCode={} chargeId={} network={} discount={}",
-                redemptionId, coupon.code(), charge.chargeId(), network, coupon.discount());
+        log.info("redeemed redemptionId={} couponCode={} chargeId={} network={} discountPercent={} amountOff={}",
+                redemptionId, coupon.code(), charge.chargeId(), network,
+                coupon.discount(), coupon.amountOff(charge.subtotal()));
 
         RedemptionReceipt receipt = new RedemptionReceipt(
                 redemptionId,
@@ -84,6 +85,8 @@ public class RedemptionService {
                 charge.chargeId(),
                 network.name(),
                 coupon.discount(),
+                "PERCENT",
+                charge.total(),
                 "REDEEMED");
 
         promotionLedger.book(receipt);

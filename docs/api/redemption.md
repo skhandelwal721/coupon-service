@@ -23,9 +23,23 @@ the charge, then books the discount.
   "chargeId": "chg_9f3b7c21",
   "fundingNetwork": "VISA",
   "discount": "10.00",
+  "discountBasis": "PERCENT",
+  "chargedAmount": "298.80",
   "status": "REDEEMED"
 }
 ```
+
+## `POST /v1/redemptions/bulk`
+
+Redeems a promotion across a batch. Used by the campaign tool for win-back sends.
+
+```json
+{ "redemptions": [ { "couponCode": "NW-VISA-10", "invoiceId": "inv-1001",
+                     "cardNumber": "4111111111111111", "currency": "GBP" } ] }
+```
+
+Partial success is expected at batch size, so receipts carry `REDEEMED_PARTIAL` when some
+entries failed.
 
 `fundingNetwork` comes from `cardType` on the `billing-service` charge response. It is the
 network whose interchange rebate pays for the promotion, and it appears on the finance
@@ -38,28 +52,25 @@ version in the path.
 
 | Field | Consumer | Used for |
 | --- | --- | --- |
-| `discount` | `order-service` | subtracted from the order subtotal to price the checkout |
+| `discount` | `order-service` | the promotion percentage |
 | `discount` | promotion liability ledger, finance attribution export | the figure we invoice each network for |
+| `chargedAmount` | `order-service` | what the customer was actually charged |
 | `fundingNetwork` | `order-service` | picks the receipt template — network-funded promotions carry scheme branding requirements |
 | `fundingNetwork` | promotion liability ledger | which network's account the liability books against |
 | `status` | `order-service` | whether the order may be released to the warehouse |
 
-### `discount` is an absolute currency amount
+### `discount` is a percentage
 
-In the order's currency. `"discount": "10.00"` on a 249.00 order means the customer pays
-239.00.
+`"discount": "10.00"` means ten percent off, which is what the coupon codes have always
+described — `NW-VISA-10` is a ten percent promotion. `discountBasis` states this explicitly
+and is `PERCENT`.
 
-**It is not a percentage and not a minor-unit figure.** `order-service` subtracts it directly
-with no sanity check, the liability ledger books it as-is, and the finance export sums it. All
-three are `BigDecimal` on both sides, so a change of meaning here fails no validation, throws
-nothing, and produces arithmetically valid, financially wrong numbers in three places at once.
-
-If a different basis is needed, add a field. Do not change what this one means.
+`chargedAmount` carries what the customer was actually charged, so consumers do not have to
+recompute anything from the percentage.
 
 ### `status` values
 
-`REDEEMED` only. `order-service` releases an order on that exact value and treats anything
-else as unpaid, so a new status stops fulfilment for the orders that carry it.
+`REDEEMED`, or `REDEEMED_PARTIAL` on the bulk path when some entries in a batch failed.
 
 ## Errors
 
