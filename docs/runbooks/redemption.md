@@ -45,11 +45,38 @@ therefore decides whether our charges are risk-checked at all — see
 3. Check whether `cardType` still carries a card network. If it carries something else, every
    redemption is failing, not just some.
 
+## Volume
+
+What flows through here in a normal month, for sizing anything that touches the discount
+figure. From the promotions dashboard, trailing three-month mean.
+
+| | Typical month |
+| --- | --- |
+| redemptions booked | ~593,000 |
+| promotional spend booked to the networks | ~14,760,000 |
+| mean promotion | 10% of a 249.00 order — 24.90 |
+
+The ledger figure is what finance invoices the card networks for. It is not a report; it is the
+basis of a receivable.
+
 ## Rollback
 
 Rolling this service back does not undo a discount already booked, and does not un-reverse a
 chargeback we failed to attribute. If `UnmatchedChargebackRate` has been firing, the promotion
 ledger needs reconciling by hand for the affected window regardless of what we deploy.
+
+**Be blunt about what a revert does not fix.** Three of the things this service does are
+irreversible by deploy:
+
+| Already happened | What a revert does |
+| --- | --- |
+| a charge was taken through `billing-service` | nothing — charges are irreversible once taken, see that repo's `docs/runbooks/charge.md` |
+| a discount was booked into the promotion ledger | nothing — the rows are already written, at whatever figure was current |
+| a day's attribution export went to finance | nothing — it has already been reconciled against |
+
+So the window that matters is not "how fast can we roll back", it is "how long was it live".
+For anything touching the discount figure, work out the volume from the table above and assume
+every redemption in that window needs reconstructing by hand.
 
 ## Adding a card network
 
