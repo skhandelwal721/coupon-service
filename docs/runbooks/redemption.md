@@ -14,6 +14,26 @@
 | `RedemptionHeldRate` | Charges are arriving that do not satisfy `subtotal + tax == total`. Something has been added to the amount charged that we cannot account for |
 | `BillingChargeDeserializationFailures` | The charge response carried a field our pinned contract version does not declare. `billing-service` shipped a response change |
 | `UnmatchedChargebackRate` | Chargebacks arriving with an acquirer prefix we cannot attribute. Coupon liability is not being reversed — **the promotion ledger is drifting** |
+| `VelocityRefusalRate` | Abuse limits firing. Expected to be non-zero; a sudden drop to zero on steady traffic means a redemption path is not calling the guard |
+
+## Where the velocity guard is called from
+
+`RedemptionController#redeem`, explicitly, before delegating to `RedemptionService`.
+
+**There is no filter, interceptor or AOP advice applying this globally.** That was deliberate —
+`RedemptionService` is also driven by the promotions backfill job, where velocity has already
+been assessed across the whole batch, and re-running it there would refuse redemptions that
+were already approved. The consequence is worth being blunt about:
+
+> **Any new redemption entrypoint must call `VelocityGuard#check` itself.** A controller that
+> calls `RedemptionService#redeem` without it books discounts and takes charges with no abuse
+> limit, and nothing in the build or at startup will tell you. If you are adding a way to
+> redeem, this is the line you must not forget.
+
+The same rule applies one hop downstream: `billing-service` documents its pre-charge risk guard
+as entrypoint-owned too (`docs/runbooks/risk.md` in that repo). Which billing endpoint we call
+therefore decides whether our charges are risk-checked at all — see
+[`../dependencies.md`](../dependencies.md).
 
 ## First checks when redemptions fail
 
