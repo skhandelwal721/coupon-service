@@ -47,6 +47,12 @@ alarms:
     threshold: 0
     periods: 1
     priority: P1
+  - name: VelocityRefusalRate
+    metric: custom:coupon.velocity.refused.rate
+    comparison: LessThanThreshold
+    threshold: 1
+    periods: 6
+    priority: P2
   - name: UnmatchedChargebackRate
     metric: custom:coupon.chargeback.unmatched.rate
     comparison: GreaterThanThreshold
