@@ -31,6 +31,26 @@ the charge, then books the discount.
 network whose interchange rebate pays for the promotion, and it appears on the finance
 attribution feed.
 
+## Contract stability
+
+This receipt is consumed outside this service. Treat it as versioned even though there is no
+version in the path.
+
+### `discount` is an absolute currency amount
+
+In the order's currency. `"discount": "10.00"` on a 249.00 order means the customer pays
+239.00.
+
+**It is not a percentage and not a minor-unit figure.** It is a `BigDecimal` either way, so a
+change of meaning here fails no validation and throws nothing — it produces arithmetically
+valid, financially wrong numbers wherever it is read.
+
+If a different basis is needed, add a field. Do not change what this one means.
+
+### `status` values
+
+`REDEEMED` only.
+
 ## Errors
 
 | Status | When |
