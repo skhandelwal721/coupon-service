@@ -1,6 +1,7 @@
 package com.northwind.coupon.redemption;
 
 import com.northwind.coupon.audit.RedemptionAuditor;
+import com.northwind.coupon.fraud.VelocityGuard;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -12,21 +13,38 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * Redeems a coupon. Customer-facing: this runs on the storefront checkout path.
+ *
+ * <p>The velocity check is applied <em>here</em>, not in {@link RedemptionService}, because
+ * the service is also driven by the promotions backfill job where velocity has already been
+ * assessed over the whole batch. That makes the guard a property of the entrypoint: any new
+ * way to redeem has to call {@link VelocityGuard#check} for itself. See
+ * {@code docs/runbooks/redemption.md}.
  */
 @RestController
 @RequestMapping("/v1/redemptions")
 public class RedemptionController {
 
     private final RedemptionService redemptionService;
+    private final VelocityGuard velocityGuard;
 
-    public RedemptionController(RedemptionService redemptionService) {
+    public RedemptionController(RedemptionService redemptionService,
+                                VelocityGuard velocityGuard) {
         this.redemptionService = redemptionService;
+        this.velocityGuard = velocityGuard;
     }
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public RedemptionReceipt redeem(@Valid @RequestBody RedemptionRequest request) {
+        velocityGuard.check(request);
         return redemptionService.redeem(request);
+    }
+
+    /** Refused before the charge — no money moved and no discount was booked. */
+    @ExceptionHandler(VelocityGuard.VelocityExceededException.class)
+    @ResponseStatus(HttpStatus.TOO_MANY_REQUESTS)
+    public String velocityExceeded(VelocityGuard.VelocityExceededException e) {
+        return e.getMessage();
     }
 
     /**

@@ -4,6 +4,7 @@ import com.northwind.coupon.audit.RedemptionAuditor;
 import com.northwind.coupon.billing.BillingChargeView;
 import com.northwind.coupon.billing.BillingClient;
 import com.northwind.coupon.billing.CardNetwork;
+import com.northwind.coupon.ledger.PromotionLedger;
 import com.northwind.coupon.promotion.Coupon;
 import com.northwind.coupon.promotion.CouponRepository;
 import com.northwind.coupon.promotion.NetworkPromotionRules;
@@ -26,7 +27,8 @@ import java.util.UUID;
  *       ({@link RedemptionAuditor}).</li>
  *   <li>Resolve the funding network from {@code cardType} and check the coupon is funded on
  *       that network ({@link NetworkPromotionRules}).</li>
- *   <li>Book the discount.</li>
+ *   <li>Book the discount into the promotion liability ledger
+ *       ({@link PromotionLedger}).</li>
  * </ol>
  *
  * <p>Steps 2 and 3 are the gates. Neither has a default branch: a charge we cannot account
@@ -42,15 +44,18 @@ public class RedemptionService {
     private final CouponRepository couponRepository;
     private final NetworkPromotionRules promotionRules;
     private final RedemptionAuditor auditor;
+    private final PromotionLedger promotionLedger;
 
     public RedemptionService(BillingClient billingClient,
                              CouponRepository couponRepository,
                              NetworkPromotionRules promotionRules,
-                             RedemptionAuditor auditor) {
+                             RedemptionAuditor auditor,
+                             PromotionLedger promotionLedger) {
         this.billingClient = billingClient;
         this.couponRepository = couponRepository;
         this.promotionRules = promotionRules;
         this.auditor = auditor;
+        this.promotionLedger = promotionLedger;
     }
 
     public RedemptionReceipt redeem(RedemptionRequest request) {
@@ -73,13 +78,17 @@ public class RedemptionService {
         log.info("redeemed redemptionId={} couponCode={} chargeId={} network={} discount={}",
                 redemptionId, coupon.code(), charge.chargeId(), network, coupon.discount());
 
-        return new RedemptionReceipt(
+        RedemptionReceipt receipt = new RedemptionReceipt(
                 redemptionId,
                 coupon.code(),
                 charge.chargeId(),
                 network.name(),
                 coupon.discount(),
                 "REDEEMED");
+
+        promotionLedger.book(receipt);
+
+        return receipt;
     }
 
     public static class UnknownCouponException extends RuntimeException {
