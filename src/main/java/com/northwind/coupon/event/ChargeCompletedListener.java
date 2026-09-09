@@ -32,7 +32,7 @@ public class ChargeCompletedListener {
     public void onChargeCompleted(ChargeCompletedEvent event) {
         CardNetwork network = CardNetwork.fromChargeResponse(event.cardType());
 
-        log.info("attributing promotional spend topic={} chargeId={} network={} total={}",
-                topic, event.chargeId(), network, event.total());
+        log.info("attributing promotional spend topic={} chargeId={} network={} total={} currency={}",
+                topic, event.chargeId(), network, event.total(), event.currency());
     }
 }
