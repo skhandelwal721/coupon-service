@@ -29,6 +29,6 @@ public enum CardNetwork {
      * @throws IllegalArgumentException if {@code cardType} is not a network we know
      */
     public static CardNetwork fromChargeResponse(String cardType) {
-        return CardNetwork.valueOf(cardType);
+        return valueOf(cardType);
     }
 }
