@@ -38,6 +38,7 @@ public class VelocityGuard {
     private final Map<String, AtomicInteger> seen = new ConcurrentHashMap<>();
 
     public void check(RedemptionRequest request) {
+        log.debug("checking redemption velocity couponCode={}", request.couponCode());
         String key = fingerprint(request.cardNumber()) + ":" + request.couponCode();
         int count = seen.computeIfAbsent(key, k -> new AtomicInteger()).incrementAndGet();
 
