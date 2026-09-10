@@ -14,7 +14,7 @@ compute:
   multiAZ: true
   healthcheck:
     path: /healthcheck
-    interval: 10
+    interval: 60
 
 environmentVariables:
   BILLING_SERVICE_BASE_URL: http://billing-service.prod.internal
