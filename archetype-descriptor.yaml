@@ -9,7 +9,7 @@ notifications:
 
 compute:
   instanceType: c6i.xlarge
-  minInstances: 4
+  minInstances: 2
   maxInstances: 12
   multiAZ: true
   healthcheck:
