@@ -50,7 +50,7 @@ change does not degrade us gracefully. It stops checkout.
 ## Local development
 
 ```bash
-./mvnw spring-boot:run -Dspring-boot.run.profiles=local
+mvn spring-boot:run -Dspring-boot.run.profiles=local
 ```
 
 ## Contract version
