@@ -3,6 +3,7 @@ package com.northwind.coupon.report;
 import com.northwind.coupon.redemption.RedemptionReceipt;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -17,7 +18,7 @@ import java.util.List;
  * {@code docs/api/redemption.md} documents as an absolute currency amount.
  *
  * <p><strong>The plausibility check is a magnitude cap, not a semantic one.</strong> A discount
- * larger than {@link #MAX_PLAUSIBLE_DISCOUNT} is held as an exception on the assumption that a
+ * larger than {@code report.maxPlausibleDiscount} is held as an exception on the assumption that a
  * four-figure discount is a data error. That catches a coupon configured wrongly. It does not
  * catch a discount figure that is <em>too small</em> — and a percentage arriving in a field
  * that should hold an amount is always too small.
@@ -30,10 +31,22 @@ import java.util.List;
 @Component
 public class AttributionExport {
 
-    /** Above this, a single discount is treated as a data error rather than a real promotion. */
-    static final BigDecimal MAX_PLAUSIBLE_DISCOUNT = new BigDecimal("1000.00");
-
     private static final Logger log = LoggerFactory.getLogger(AttributionExport.class);
+
+    /**
+     * Above this, a single discount is treated as a data error rather than a real promotion.
+     *
+     * <p>Configurable via {@code report.maxPlausibleDiscount}. The hard-coded 1000.00 was
+     * holding legitimate rows once the enterprise catalogue went live — a 40% coupon on a
+     * five-figure basket is a real promotion, and every one of them landed in the exceptions
+     * list for someone to clear by hand.
+     */
+    private final BigDecimal maxPlausibleDiscount;
+
+    public AttributionExport(
+            @Value("${report.maxPlausibleDiscount:25000.00}") BigDecimal maxPlausibleDiscount) {
+        this.maxPlausibleDiscount = maxPlausibleDiscount;
+    }
 
     public Export build(String date, List<RedemptionReceipt> receipts) {
         List<ExportRow> rows = new ArrayList<>();
@@ -43,9 +56,9 @@ public class AttributionExport {
         for (RedemptionReceipt receipt : receipts) {
             BigDecimal discount = receipt.discount();
 
-            if (discount.compareTo(MAX_PLAUSIBLE_DISCOUNT) > 0) {
+            if (discount.compareTo(maxPlausibleDiscount) > 0) {
                 exceptions.add("redemption " + receipt.redemptionId() + " discount " + discount
-                        + " is above the plausible ceiling " + MAX_PLAUSIBLE_DISCOUNT);
+                        + " is above the plausible ceiling " + maxPlausibleDiscount);
                 continue;
             }
 

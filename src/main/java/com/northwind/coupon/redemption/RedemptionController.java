@@ -3,6 +3,7 @@ package com.northwind.coupon.redemption;
 import com.northwind.coupon.analytics.RedemptionAnalyticsClient;
 import com.northwind.coupon.audit.RedemptionAuditor;
 import com.northwind.coupon.fraud.VelocityGuard;
+import com.northwind.coupon.report.ReceiptStore;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -20,6 +21,9 @@ import org.springframework.web.bind.annotation.RestController;
  * assessed over the whole batch. That makes the guard a property of the entrypoint: any new
  * way to redeem has to call {@link VelocityGuard#check} for itself. See
  * {@code docs/runbooks/redemption.md}.
+ *
+ * <p>Completed receipts are recorded into {@link ReceiptStore} so finance can pull the
+ * attribution export intraday — see {@code docs/api/reports.md}.
  */
 @RestController
 @RequestMapping("/v1/redemptions")
@@ -28,13 +32,16 @@ public class RedemptionController {
     private final RedemptionService redemptionService;
     private final VelocityGuard velocityGuard;
     private final RedemptionAnalyticsClient analytics;
+    private final ReceiptStore receipts;
 
     public RedemptionController(RedemptionService redemptionService,
                                 VelocityGuard velocityGuard,
-                                RedemptionAnalyticsClient analytics) {
+                                RedemptionAnalyticsClient analytics,
+                                ReceiptStore receipts) {
         this.redemptionService = redemptionService;
         this.velocityGuard = velocityGuard;
         this.analytics = analytics;
+        this.receipts = receipts;
     }
 
     @PostMapping
@@ -42,6 +49,7 @@ public class RedemptionController {
     public RedemptionReceipt redeem(@Valid @RequestBody RedemptionRequest request) {
         velocityGuard.check(request);
         RedemptionReceipt receipt = redemptionService.redeem(request);
+        receipts.record(receipt);
         analytics.publish(receipt);
         return receipt;
     }
