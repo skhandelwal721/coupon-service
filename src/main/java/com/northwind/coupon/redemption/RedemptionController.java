@@ -4,6 +4,8 @@ import com.northwind.coupon.analytics.RedemptionAnalyticsClient;
 import com.northwind.coupon.audit.RedemptionAuditor;
 import com.northwind.coupon.fraud.VelocityGuard;
 import jakarta.validation.Valid;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -20,10 +22,16 @@ import org.springframework.web.bind.annotation.RestController;
  * assessed over the whole batch. That makes the guard a property of the entrypoint: any new
  * way to redeem has to call {@link VelocityGuard#check} for itself. See
  * {@code docs/runbooks/redemption.md}.
+ *
+ * <p>Analytics publishing runs after the redemption is complete and is best-effort: it reports
+ * failure rather than throwing, because by that point the charge has been taken and there is
+ * nothing left to abort.
  */
 @RestController
 @RequestMapping("/v1/redemptions")
 public class RedemptionController {
+
+    private static final Logger log = LoggerFactory.getLogger(RedemptionController.class);
 
     private final RedemptionService redemptionService;
     private final VelocityGuard velocityGuard;
@@ -42,7 +50,15 @@ public class RedemptionController {
     public RedemptionReceipt redeem(@Valid @RequestBody RedemptionRequest request) {
         velocityGuard.check(request);
         RedemptionReceipt receipt = redemptionService.redeem(request);
-        analytics.publish(receipt);
+
+        // Best-effort, and deliberately last. The charge has settled and the discount is
+        // booked by this point, so the redemption is already irreversible — an analytics
+        // outage must not turn a completed redemption into a failed checkout.
+        if (!analytics.publish(receipt)) {
+            log.warn("redemption completed but was not published to analytics redemptionId={}",
+                    receipt.redemptionId());
+        }
+
         return receipt;
     }
 
