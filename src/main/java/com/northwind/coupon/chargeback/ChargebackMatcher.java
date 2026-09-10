@@ -37,6 +37,7 @@ public class ChargebackMatcher {
 
     public Acquirer acquirerOf(String acquirerReference) {
         if (acquirerReference != null && acquirerReference.startsWith(WORLDPAY_REFERENCE_PREFIX)) {
+            log.debug("matched chargeback to acquirer acquirerReference={}", acquirerReference);
             return Acquirer.WORLDPAY;
         }
 
