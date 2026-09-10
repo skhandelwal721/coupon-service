@@ -88,3 +88,23 @@ start charging it.
 Doing it the other way round means we take charges on a network we cannot attribute, and
 `NetworkPromotionRulesTest.everyKnownNetworkResolvesToAFundingNetwork` is what stops that
 shipping quietly from our side.
+
+## Analytics publishing
+
+Redemptions are posted to the shared analytics platform (COUPON-461) *after* the charge has
+settled and the discount has been booked. It is **best-effort and outside the checkout SLO**:
+`RedemptionAnalyticsClient.publish` returns `false` on any failure and never throws.
+
+That is deliberate, and it follows from the table above. At the point analytics is called the
+redemption is already irreversible — a charge has been taken and a liability booked. Failing the
+request would show the customer a failed checkout for an order they have been charged for, and
+add an unreconciled row to the ledger, in exchange for one missing analytics event.
+
+| Symptom | What it means | What to do |
+| --- | --- | --- |
+| `could not publish redemption analytics` warnings | platform unreachable, or slower than `analytics.requestTimeoutMillis` | nothing urgent — the overnight warehouse load reconciles the gap |
+| `redemption completed but was not published to analytics` | same, seen from the entrypoint | count them; if sustained, tell growth their intraday numbers are short |
+| `could not serialize redemption analytics` | a bug on our side, not an outage | find the redemption by id in the log and raise it — the receipt is fine, the event is not |
+
+Do not "fix" a publish failure by making it throw. If analytics ever needs to be a hard
+dependency of checkout, it has to move *before* the charge, not after it.

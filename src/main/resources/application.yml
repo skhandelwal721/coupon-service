@@ -34,8 +34,19 @@ events:
   billing:
     chargeCompletedTopic: northwind.billing.charge.completed
 
+# --------------------------------------------------------------------------------------
+# analytics platform
+#
+# Best-effort, and not part of the checkout SLO. Published after the charge has settled, so
+# a failure here is logged and dropped rather than surfaced — the redemption is already
+# irreversible by then and the overnight warehouse load reconciles the gap.
+# --------------------------------------------------------------------------------------
 analytics:
   redemptionEndpoint: https://analytics.northwind.example/v1/events/redemption
+  # Bounds how long a redemption response can be held waiting on analytics. There was no
+  # request timeout before, only a connect timeout, so a platform that accepted the
+  # connection and then stalled held a checkout thread indefinitely.
+  requestTimeoutMillis: 500
 
 logging:
   level:
