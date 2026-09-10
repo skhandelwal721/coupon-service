@@ -8,6 +8,10 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
+/**
+ * The promotion catalogue. Fixed for the fixture — the real repository reads the
+ * catalogue from the promotions service.
+ */
 @Repository
 public class CouponRepository {
 
