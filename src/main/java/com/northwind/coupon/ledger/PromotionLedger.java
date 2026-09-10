@@ -50,6 +50,24 @@ public class PromotionLedger {
                 receipt.redemptionId(), network, receipt.discount(), updated);
     }
 
+    /**
+     * Reverses a booked discount, for a charge that has been clawed back.
+     *
+     * <p>Called by {@code ChargebackReconciliationJob}. The figure is subtracted as-is, on the
+     * same basis it was booked on.
+     *
+     * @param cardType the funding network as billing-service reports it
+     */
+    public void reverse(String cardType, BigDecimal discount) {
+        CardNetwork network = CardNetwork.fromChargeResponse(cardType);
+
+        BigDecimal updated = liability.get(network).subtract(discount);
+        liability.put(network, updated);
+
+        log.info("reversed promotion liability network={} discount={} accountTotal={}",
+                network, discount, updated);
+    }
+
     public BigDecimal liabilityFor(CardNetwork network) {
         return liability.get(network);
     }
