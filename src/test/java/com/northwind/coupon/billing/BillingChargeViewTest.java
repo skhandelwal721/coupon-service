@@ -7,7 +7,6 @@ import org.junit.jupiter.api.Test;
 import java.math.BigDecimal;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
  * Contract test for billing-service's charge response.
@@ -47,15 +46,13 @@ class BillingChargeViewTest {
     }
 
     /**
-     * Guard rail for a contract change upstream.
-     *
-     * <p>billing-service declares {@code additionalProperties: false} on {@code ChargeResponse},
-     * so a new field is a breaking change for us, not an additive one. We assert the failure
-     * deliberately: if this test ever goes green with an extra field present, it means someone
-     * relaxed our deserializer and we have lost the signal that their contract moved.
+     * billing-service relaxed {@code additionalProperties} to {@code true} in 4.12.0 and
+     * documents new response fields as additive. Asserting the old strict behaviour would fail
+     * the build — and take checkout down — every time they ship a field, which is an outage we
+     * would be causing ourselves. So we assert the leniency instead.
      */
     @Test
-    void rejectsAResponseCarryingAFieldTheContractDoesNotDeclare() {
+    void ignoresAResponseFieldWeDoNotKnowAbout() throws Exception {
         String withUnknownField = """
                 {
                   "chargeId": "chg_9f3b7c21",
@@ -63,17 +60,21 @@ class BillingChargeViewTest {
                   "subtotal": "249.00",
                   "surcharge": "3.74",
                   "tax": "49.80",
-                  "total": "298.80",
+                  "total": "302.54",
                   "currency": "GBP",
-                  "cardType": "VISA",
-                  "acquirerReference": "wp_4f8a21c7",
-                  "status": "CHARGED"
+                  "cardType": "CHARGE_CARD",
+                  "cardNetwork": "AMEX",
+                  "acquirerReference": "amex_4f8a21c7",
+                  "status": "CHARGED",
+                  "settlementBatchId": "btc_20260901_02"
                 }
                 """;
 
-        assertThrows(Exception.class,
-                () -> mapper.readValue(withUnknownField, BillingChargeView.class),
-                "an undeclared response field must fail loudly, not be dropped silently");
+        BillingChargeView charge = mapper.readValue(withUnknownField, BillingChargeView.class);
+
+        assertEquals("chg_9f3b7c21", charge.chargeId());
+        assertEquals("AMEX", charge.cardNetwork());
+        assertEquals(new BigDecimal("3.74"), charge.surcharge());
     }
 
     /**

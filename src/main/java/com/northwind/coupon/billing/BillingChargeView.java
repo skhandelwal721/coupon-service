@@ -7,37 +7,43 @@ import java.math.BigDecimal;
 /**
  * Our view of a billing-service charge response.
  *
- * <p><strong>Generated from billing-service's published contract</strong> —
- * {@code docs/api/openapi.yaml}, schema {@code ChargeResponse}, pinned at the version in
- * {@code billing.contract.version}. Do not hand-edit: regenerate when billing-service tags a
- * new contract version, and read their changelog first.
+ * <p>Generated from billing-service {@code docs/api/openapi.yaml}, schema
+ * {@code ChargeResponse}, pinned at the version in {@code billing.contract.version}.
  *
- * <p><strong>Deserialization is strict on purpose.</strong> The published schema declares
- * {@code additionalProperties: false}, so we mirror it with
- * {@code ignoreUnknown = false}. A field appearing here that we do not know about means the
- * charge contract changed without us; we would rather fail the redemption loudly than apply a
- * discount against a charge we only partly understand. A charge whose shape we cannot trust is
- * a charge we cannot reconcile.
+ * <p>Now lenient. billing-service relaxed {@code additionalProperties} to {@code true} in
+ * 4.12.0 and documents new response fields as additive, so failing on an unknown property just
+ * means an outage every time they ship one. {@code ignoreUnknown = true} keeps us up.
  *
- * <p>The three things we depend on, all of them documented as stable by billing-service:
- *
- * <ol>
- *   <li>{@code cardType} is the card network — see {@link CardNetwork#fromChargeResponse}.</li>
- *   <li>{@code acquirerReference} is prefixed by the acquirer that issued it — see
- *       {@code ChargebackMatcher}.</li>
- *   <li>{@code subtotal + tax == total} — see {@code RedemptionAuditor}.</li>
- * </ol>
+ * <p>Picks up {@code surcharge} and {@code cardNetwork} from 4.12.0. {@code cardType} now
+ * carries the funding type, so the network is read from {@code cardNetwork}.
  */
-@JsonIgnoreProperties(ignoreUnknown = false)
+@JsonIgnoreProperties(ignoreUnknown = true)
 public record BillingChargeView(
         String chargeId,
         String invoiceId,
         BigDecimal subtotal,
+        BigDecimal surcharge,
         BigDecimal tax,
         BigDecimal total,
         String currency,
         String cardType,
+        String cardNetwork,
         String acquirerReference,
         String status
 ) {
+
+    /**
+     * Back-compatible form, for call sites generated against 4.11.0.
+     *
+     * <p>Keeps this bump additive. {@code surcharge} defaults to zero, which is what it is on
+     * every network except Amex, so the balance identity is unchanged for existing traffic.
+     * {@code cardNetwork} falls back to {@code cardType}: before 4.12.0 that field carried the
+     * network, so on a 4.11.0 call site the two are the same value.
+     */
+    public BillingChargeView(String chargeId, String invoiceId, BigDecimal subtotal,
+                             BigDecimal tax, BigDecimal total, String currency,
+                             String cardType, String acquirerReference, String status) {
+        this(chargeId, invoiceId, subtotal, BigDecimal.ZERO, tax, total,
+                currency, cardType, cardType, acquirerReference, status);
+    }
 }

@@ -62,8 +62,11 @@ public class RedemptionService {
         Coupon coupon = couponRepository.find(request.couponCode())
                 .orElseThrow(() -> new UnknownCouponException(request.couponCode()));
 
+        // The consolidated endpoint applies the promotion as part of the charge, so we send the
+        // coupon's discount with it. We no longer look the invoice up first, so this is the
+        // figure we have at this point.
         BillingChargeView charge = billingClient.charge(
-                request.invoiceId(), request.cardNumber(), request.currency());
+                request.invoiceId(), request.cardNumber(), request.currency(), coupon.discount());
 
         auditor.requireAccountable(charge);
 
@@ -75,8 +78,9 @@ public class RedemptionService {
         CardNetwork network = promotionRules.fundingNetwork(charge);
         String redemptionId = "rdm_" + UUID.randomUUID();
 
-        log.info("redeemed redemptionId={} couponCode={} chargeId={} network={} discount={}",
-                redemptionId, coupon.code(), charge.chargeId(), network, coupon.discount());
+        log.info("redeemed redemptionId={} couponCode={} chargeId={} network={} discountPercent={} amountOff={}",
+                redemptionId, coupon.code(), charge.chargeId(), network,
+                coupon.discount(), coupon.amountOff(charge.subtotal()));
 
         RedemptionReceipt receipt = new RedemptionReceipt(
                 redemptionId,
@@ -84,6 +88,8 @@ public class RedemptionService {
                 charge.chargeId(),
                 network.name(),
                 coupon.discount(),
+                "PERCENT",
+                charge.total(),
                 "REDEEMED");
 
         promotionLedger.book(receipt);
