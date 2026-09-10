@@ -38,12 +38,6 @@ consumers:
       - northwind.billing.charge.completed
 
 alarms:
-  - name: RedemptionErrorRate
-    metric: custom:coupon.redemption.5xx.rate
-    comparison: GreaterThanThreshold
-    threshold: 1
-    periods: 2
-    priority: P1
   - name: RedemptionHeldRate
     metric: custom:coupon.redemption.held.rate
     comparison: GreaterThanThreshold
