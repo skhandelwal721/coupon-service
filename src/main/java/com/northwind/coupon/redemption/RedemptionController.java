@@ -1,5 +1,6 @@
 package com.northwind.coupon.redemption;
 
+import com.northwind.coupon.analytics.RedemptionAnalyticsClient;
 import com.northwind.coupon.audit.RedemptionAuditor;
 import com.northwind.coupon.fraud.VelocityGuard;
 import jakarta.validation.Valid;
@@ -26,18 +27,23 @@ public class RedemptionController {
 
     private final RedemptionService redemptionService;
     private final VelocityGuard velocityGuard;
+    private final RedemptionAnalyticsClient analytics;
 
     public RedemptionController(RedemptionService redemptionService,
-                                VelocityGuard velocityGuard) {
+                                VelocityGuard velocityGuard,
+                                RedemptionAnalyticsClient analytics) {
         this.redemptionService = redemptionService;
         this.velocityGuard = velocityGuard;
+        this.analytics = analytics;
     }
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public RedemptionReceipt redeem(@Valid @RequestBody RedemptionRequest request) {
         velocityGuard.check(request);
-        return redemptionService.redeem(request);
+        RedemptionReceipt receipt = redemptionService.redeem(request);
+        analytics.publish(receipt);
+        return receipt;
     }
 
     /** Refused before the charge — no money moved and no discount was booked. */
