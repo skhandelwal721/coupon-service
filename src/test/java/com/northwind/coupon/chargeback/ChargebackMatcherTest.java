@@ -3,8 +3,6 @@ package com.northwind.coupon.chargeback;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ChargebackMatcherTest {
 
@@ -15,21 +13,27 @@ class ChargebackMatcherTest {
         assertEquals(ChargebackMatcher.Acquirer.WORLDPAY, matcher.acquirerOf("wp_4f8a21c7"));
     }
 
+    @Test
+    void attributesAnAdyenReference() {
+        assertEquals(ChargebackMatcher.Acquirer.ADYEN, matcher.acquirerOf("ad_9b31f7ca"));
+    }
+
     /**
-     * Guard rail for a second acquirer.
-     *
-     * <p>We derive the acquirer from the reference prefix, so a reference from an acquirer we
-     * do not know cannot be attributed and the coupon liability is never reversed. If
-     * billing-service adds an acquirer, this is where we find out — and the fix is a prefix
-     * mapping here, not a relaxation of this test.
+     * An acquirer we have not mapped yet resolves to {@code UNKNOWN} so the nightly batch can
+     * finish. This used to throw, which took the whole reconciliation run down with it.
      */
     @Test
-    void refusesAReferenceFromAnAcquirerItCannotAttribute() {
-        ChargebackMatcher.UnattributableChargebackException e = assertThrows(
-                ChargebackMatcher.UnattributableChargebackException.class,
-                () -> matcher.acquirerOf("amex_7c2b91de"));
+    void resolvesAnUnmappedAcquirerToUnknown() {
+        assertEquals(ChargebackMatcher.Acquirer.UNKNOWN, matcher.acquirerOf("amex_7c2b91de"));
+    }
 
-        assertTrue(e.getMessage().contains("amex_7c2b91de"));
-        assertTrue(e.getMessage().contains("cannot be reversed"));
+    @Test
+    void resolvesANullReferenceToUnknown() {
+        assertEquals(ChargebackMatcher.Acquirer.UNKNOWN, matcher.acquirerOf(null));
+    }
+
+    @Test
+    void doesNotMatchAPrefixThatOnlyAppearsMidReference() {
+        assertEquals(ChargebackMatcher.Acquirer.UNKNOWN, matcher.acquirerOf("xx_wp_4f8a21c7"));
     }
 }

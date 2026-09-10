@@ -26,7 +26,8 @@ line in `CardNetwork.fromChargeResponse`, but it has to land in our deploy **bef
 
 ## 2. `acquirerReference` is prefixed by the acquirer
 
-**Where:** `ChargebackMatcher.acquirerOf`, keyed on `WORLDPAY_REFERENCE_PREFIX = "wp_"`.
+**Where:** `ChargebackMatcher.acquirerOf`, keyed on the `PREFIXES` map — `wp_` (Worldpay) and,
+as of COUPON-481, `ad_` (Adyen, for EUR volume).
 
 **Why we need it:** chargebacks arrive from the acquirer, not from `billing-service`, and carry
 only the acquirer's own reference. The prefix is the only thing that tells us which acquirer
@@ -43,6 +44,11 @@ This is the quietest of the four failures and the most expensive to unwind.
 **What would make this safe:** tell us before a second acquirer goes live. The fix is a prefix
 mapping in `ChargebackMatcher`; it is small, but we cannot write it against a prefix we have
 not been told about.
+
+As of COUPON-481 an unmapped prefix resolves to `Acquirer.UNKNOWN` and the reconciliation batch
+skips that line rather than aborting, so one unknown acquirer no longer blocks the chargebacks
+we *can* attribute. The liability for the skipped line is still not reversed — watch
+`UnmatchedChargebackRate` and the `chargebacks we could not attribute` warning.
 
 ## 3. `subtotal + tax == total`
 

@@ -81,10 +81,33 @@ every redemption in that window needs reconstructing by hand.
 ## Adding a card network
 
 Every network `billing-service` can charge needs a funding agreement before we can attribute a
-promotion to it. The order is: funding agreement → prefix mapping in `ChargebackMatcher` if the
-network settles through a new acquirer → `CardNetwork` entry here → then `billing-service` may
-start charging it.
+promotion to it. The order is: funding agreement → prefix mapping in `ChargebackMatcher.PREFIXES`
+if the network settles through a new acquirer → `CardNetwork` entry here → then
+`billing-service` may start charging it.
 
 Doing it the other way round means we take charges on a network we cannot attribute, and
 `NetworkPromotionRulesTest.everyKnownNetworkResolvesToAFundingNetwork` is what stops that
 shipping quietly from our side.
+
+## Chargeback reconciliation
+
+`ChargebackReconciliationJob.reconcile` walks the acquirers' nightly chargeback file and
+reverses each attributable line out of `PromotionLedger`.
+
+An acquirer prefix we have not mapped resolves to `Acquirer.UNKNOWN` and that line is **skipped
+and counted**, not thrown. Before COUPON-481 it threw, which aborted the whole batch: every
+chargeback after the unknown one went unreversed too, and the run had to be restarted by hand.
+
+**What a skip still costs.** The liability for that line is not reversed — the discount stays
+booked against a charge that has been clawed back, so the ledger overstates what we owe the
+network and we invoice from it. Skipping is better than aborting, but it is not a fix.
+
+| Signal | Meaning | Action |
+| --- | --- | --- |
+| `chargebacks we could not attribute references=[...]` | a live acquirer is not in `PREFIXES` | map the prefix, then re-run the affected nights |
+| `UnmatchedChargebackRate` climbing | same, seen from the alarm | as above — the ledger is drifting until it is fixed |
+| `reconciled chargebacks reversed=N skipped=0` | healthy | none |
+
+Re-running a night after adding a prefix is safe: `reverse` is a subtraction against the
+network account, so reversing a line twice double-subtracts. Check `skipped` from the original
+run and replay only those references.
