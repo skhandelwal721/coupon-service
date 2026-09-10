@@ -11,7 +11,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class AttributionExportTest {
 
-    private final AttributionExport export = new AttributionExport();
+    private static final BigDecimal CEILING = new BigDecimal("25000.00");
+
+    private final AttributionExport export = new AttributionExport(CEILING);
 
     @Test
     void sumsDiscountsAsAbsoluteAmounts() {
@@ -28,11 +30,36 @@ class AttributionExportTest {
     @Test
     void holdsAnImplausiblyLargeDiscountAsAnException() {
         AttributionExport.Export result = export.build("2026-09-01", List.of(
-                receipt("rdm_9", "5000.00")));
+                receipt("rdm_9", "30000.00")));
 
         assertEquals(0, result.rows().size());
         assertEquals(1, result.exceptions().size());
         assertTrue(result.exceptions().get(0).contains("plausible ceiling"));
+    }
+
+    /**
+     * The enterprise catalogue rows the old 1000.00 ceiling was holding. A 40% coupon on a
+     * five-figure basket is a real promotion and belongs in the export, not the exceptions list.
+     */
+    @Test
+    void exportsAnEnterpriseSizedDiscountThatTheOldCeilingHeld() {
+        AttributionExport.Export result = export.build("2026-09-01", List.of(
+                receipt("rdm_7", "5000.00")));
+
+        assertEquals(1, result.rows().size());
+        assertEquals(new BigDecimal("5000.00"), result.total());
+        assertTrue(result.exceptions().isEmpty());
+    }
+
+    @Test
+    void honoursTheConfiguredCeiling() {
+        AttributionExport tighter = new AttributionExport(new BigDecimal("100.00"));
+
+        AttributionExport.Export result = tighter.build("2026-09-01", List.of(
+                receipt("rdm_8", "5000.00")));
+
+        assertEquals(0, result.rows().size());
+        assertEquals(1, result.exceptions().size());
     }
 
     /**

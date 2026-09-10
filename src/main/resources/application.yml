@@ -37,6 +37,14 @@ events:
 analytics:
   redemptionEndpoint: https://analytics.northwind.example/v1/events/redemption
 
+# --------------------------------------------------------------------------------------
+# finance attribution export
+# --------------------------------------------------------------------------------------
+report:
+  # A single discount above this is held as an exception rather than exported. Was hard-coded
+  # at 1000.00, which held legitimate rows once the enterprise catalogue went live.
+  maxPlausibleDiscount: 25000.00
+
 logging:
   level:
     com.northwind.coupon: INFO
