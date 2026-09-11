@@ -1,8 +1,58 @@
 # Redemption API
 
-**Contract version: 2.4.0.** Consumers generate or hand-write their DTO against a pinned
+**Contract version: 3.0.0.** Consumers generate or hand-write their DTO against a pinned
 version of this document — see `coupon.contract.version` in the consuming repository. Any change
 to a field's **name, type or meaning** is a major bump and has to be announced before it ships.
+
+### Changed in 3.0.0 — COUPON-492, asynchronous completion
+
+**Wire field names.**
+
+| 2.4.0 | 3.0.0 | Why |
+| --- | --- | --- |
+| `couponCode` | **`voucherCode`** | the business has said "voucher" since the loyalty programme launched; "coupon" only survived internally |
+| `fundingNetwork` | **`network`** | the value was always just the card network |
+
+Java accessors are unchanged, so this is a serialization concern only for us. **It is not a
+serialization concern for consumers:** a consumer pinned to 2.4.0 reads `couponCode` and
+`fundingNetwork`, which are no longer present, and a lenient deserializer will populate both as
+`null` without raising anything.
+
+**Completion is asynchronous.**
+
+`POST /v1/redemptions` now returns **`202 Accepted`** with `status: "PENDING"` as soon as the
+charge has settled. The redemption reaches `REDEEMED` when
+`northwind.coupon.redemption.completed` is processed.
+
+| Status | Meaning |
+| --- | --- |
+| `PENDING` | accepted, charge taken, completion in flight |
+| `REDEEMED` | terminal success |
+
+A consumer that treats a 2xx response as "the discount was applied and the charge settled" has
+to read `status` instead.
+
+## `northwind.coupon.redemption.completed`
+
+Published once per redemption completion. At-least-once.
+
+```json
+{
+  "eventType": "northwind.coupon.redemption.completed",
+  "eventId": "evt_1c9f4a70",
+  "voucherCode": "NW-VISA-10",
+  "chargeId": "chg_9f3b7c21",
+  "network": "VISA",
+  "discount": "24.90",
+  "status": "REDEEMED",
+  "occurredAt": "2026-09-11T10:14:22Z"
+}
+```
+
+`eventId` is unique per publication and is how a single emission is traced.
+
+The payload uses the same wire names as the synchronous response, deliberately, so a consumer
+reading both uses one deserializer for both.
 
 ## `POST /v1/redemptions`
 

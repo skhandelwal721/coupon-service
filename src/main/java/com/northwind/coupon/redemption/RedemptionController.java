@@ -2,6 +2,7 @@ package com.northwind.coupon.redemption;
 
 import com.northwind.coupon.analytics.RedemptionAnalyticsClient;
 import com.northwind.coupon.audit.RedemptionAuditor;
+import com.northwind.coupon.event.RedemptionEventPublisher;
 import com.northwind.coupon.fraud.VelocityGuard;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -20,6 +21,11 @@ import org.springframework.web.bind.annotation.RestController;
  * assessed over the whole batch. That makes the guard a property of the entrypoint: any new
  * way to redeem has to call {@link VelocityGuard#check} for itself. See
  * {@code docs/runbooks/redemption.md}.
+ *
+ * <p><strong>Completion is asynchronous from COUPON-492.</strong> The response is {@code 202}
+ * with a {@code PENDING} receipt as soon as the charge has settled; the redemption reaches
+ * {@code REDEEMED} when {@code northwind.coupon.redemption.completed} is processed. The
+ * storefront no longer waits on the ledger write or the analytics publish.
  */
 @RestController
 @RequestMapping("/v1/redemptions")
@@ -28,21 +34,29 @@ public class RedemptionController {
     private final RedemptionService redemptionService;
     private final VelocityGuard velocityGuard;
     private final RedemptionAnalyticsClient analytics;
+    private final RedemptionEventPublisher events;
 
     public RedemptionController(RedemptionService redemptionService,
                                 VelocityGuard velocityGuard,
-                                RedemptionAnalyticsClient analytics) {
+                                RedemptionAnalyticsClient analytics,
+                                RedemptionEventPublisher events) {
         this.redemptionService = redemptionService;
         this.velocityGuard = velocityGuard;
         this.analytics = analytics;
+        this.events = events;
     }
 
     @PostMapping
-    @ResponseStatus(HttpStatus.CREATED)
+    @ResponseStatus(HttpStatus.ACCEPTED)
     public RedemptionReceipt redeem(@Valid @RequestBody RedemptionRequest request) {
         velocityGuard.check(request);
         RedemptionReceipt receipt = redemptionService.redeem(request);
+
+        // Completion moves off the response. The charge has settled by this point, so the
+        // redemption is accepted; the event carries it to REDEEMED.
+        events.publish(receipt);
         analytics.publish(receipt);
+
         return receipt;
     }
 

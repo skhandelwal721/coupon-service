@@ -33,6 +33,9 @@ clients:
 events:
   billing:
     chargeCompletedTopic: northwind.billing.charge.completed
+  # Redemption completion, published by us — COUPON-492. At-least-once, the platform default.
+  coupon:
+    redemptionCompletedTopic: northwind.coupon.redemption.completed
 
 analytics:
   redemptionEndpoint: https://analytics.northwind.example/v1/events/redemption

@@ -36,6 +36,20 @@ consumers:
     reads:
       - charge response — cardType, acquirerReference, subtotal, tax, total
       - northwind.billing.charge.completed
+  - service: billing-service
+    tier: 1
+    contract: docs/api/redemption.md
+    pinnedVersion: 2.4.0
+    criticality: hard
+    reads:
+      - northwind.coupon.redemption.completed
+
+# Topics we publish.
+events:
+  publishes:
+    - topic: northwind.coupon.redemption.completed
+      contract: docs/api/redemption.md
+      delivery: at-least-once
 
 alarms:
   - name: RedemptionHeldRate
