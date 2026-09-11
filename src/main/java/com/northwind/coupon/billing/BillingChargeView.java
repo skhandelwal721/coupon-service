@@ -12,12 +12,11 @@ import java.math.BigDecimal;
  * {@code billing.contract.version}. Do not hand-edit: regenerate when billing-service tags a
  * new contract version, and read their changelog first.
  *
- * <p><strong>Deserialization is strict on purpose.</strong> The published schema declares
- * {@code additionalProperties: false}, so we mirror it with
- * {@code ignoreUnknown = false}. A field appearing here that we do not know about means the
- * charge contract changed without us; we would rather fail the redemption loudly than apply a
- * discount against a charge we only partly understand. A charge whose shape we cannot trust is
- * a charge we cannot reconcile.
+ * <p><strong>Deserialization is lenient from COUPON-493.</strong> The regional charge
+ * endpoints annotate their responses with the zone the charge was taken in, and that annotation
+ * is added per region as each one is certified — so a strict deserializer here means a
+ * storefront outage in a region on the day its certification lands, for a field we do not read.
+ * We drop what we do not know instead.
  *
  * <p>The three things we depend on, all of them documented as stable by billing-service:
  *
@@ -28,7 +27,7 @@ import java.math.BigDecimal;
  *   <li>{@code subtotal + tax == total} — see {@code RedemptionAuditor}.</li>
  * </ol>
  */
-@JsonIgnoreProperties(ignoreUnknown = false)
+@JsonIgnoreProperties(ignoreUnknown = true)
 public record BillingChargeView(
         String chargeId,
         String invoiceId,

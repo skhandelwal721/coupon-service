@@ -7,7 +7,6 @@ import org.junit.jupiter.api.Test;
 import java.math.BigDecimal;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
  * Contract test for billing-service's charge response.
@@ -19,7 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 class BillingChargeViewTest {
 
     private final ObjectMapper mapper = new ObjectMapper()
-            .enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
+            .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
 
     /** The response shape billing-service publishes today, field for field. */
     private static final String PUBLISHED_RESPONSE = """
@@ -47,33 +46,33 @@ class BillingChargeViewTest {
     }
 
     /**
-     * Guard rail for a contract change upstream.
-     *
-     * <p>billing-service declares {@code additionalProperties: false} on {@code ChargeResponse},
-     * so a new field is a breaking change for us, not an additive one. We assert the failure
-     * deliberately: if this test ever goes green with an extra field present, it means someone
-     * relaxed our deserializer and we have lost the signal that their contract moved.
+     * The regional charge endpoints annotate their responses with the zone the charge was taken
+     * in, and that annotation arrives per region as each one is certified. Asserting the old
+     * strict behaviour would take a region's storefront down on the day its certification
+     * lands, for a field we do not read — so we assert the leniency instead.
      */
     @Test
-    void rejectsAResponseCarryingAFieldTheContractDoesNotDeclare() {
-        String withUnknownField = """
+    void ignoresAResponseFieldWeDoNotKnowAbout() throws Exception {
+        String withRegionalAnnotation = """
                 {
                   "chargeId": "chg_9f3b7c21",
                   "invoiceId": "inv-1001",
                   "subtotal": "249.00",
-                  "surcharge": "3.74",
                   "tax": "49.80",
                   "total": "298.80",
                   "currency": "GBP",
                   "cardType": "VISA",
                   "acquirerReference": "wp_4f8a21c7",
-                  "status": "CHARGED"
+                  "status": "CHARGED",
+                  "residencyZone": "eu-central-1"
                 }
                 """;
 
-        assertThrows(Exception.class,
-                () -> mapper.readValue(withUnknownField, BillingChargeView.class),
-                "an undeclared response field must fail loudly, not be dropped silently");
+        BillingChargeView charge =
+                mapper.readValue(withRegionalAnnotation, BillingChargeView.class);
+
+        assertEquals("chg_9f3b7c21", charge.chargeId());
+        assertEquals(new BigDecimal("298.80"), charge.total());
     }
 
     /**
