@@ -1,8 +1,29 @@
 # Redemption API
 
-**Contract version: 2.4.0.** Consumers generate or hand-write their DTO against a pinned
+**Contract version: 2.5.0.** Consumers generate or hand-write their DTO against a pinned
 version of this document — see `coupon.contract.version` in the consuming repository. Any change
 to a field's **name, type or meaning** is a major bump and has to be announced before it ships.
+
+### Changed in 2.5.0 — COUPON-491, device and origin velocity
+
+**Request — three new fields:**
+
+| Field | Required | Purpose |
+| --- | --- | --- |
+| `deviceId` | **yes** | storefront device identifier; input to device velocity |
+| `customerIp` | **yes** | originating IP as seen by the storefront edge |
+| `customerEmail` | no | investigation linkage only, not part of the automated decision |
+
+`deviceId` and `customerIp` are required because a velocity check that falls back to
+`"unknown"` is a velocity check that does not run — an optional field here would let an attacker
+opt out of the check by omitting it.
+
+**Response — one new field:**
+
+| Field | Purpose |
+| --- | --- |
+| `customerIp` | the origin the redemption came from, recorded durably on the receipt because log retention often closes before a chargeback arrives |
+
 
 ## `POST /v1/redemptions`
 

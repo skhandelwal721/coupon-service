@@ -17,6 +17,10 @@ import java.math.BigDecimal;
  * <p>We call {@code POST /v1/invoices/{invoiceId}/charge}. billing-service 4.12 introduces
  * {@code POST /v1/charges} and marks it preferred; we have deliberately not migrated. Blocked
  * on COUPON-441.
+ *
+ * <p>Since COUPON-491 the card number is masked before it leaves us — see {@link CardMask}.
+ * PCI-DSS wants the full PAN in as few places as possible, and the last four is all anything
+ * downstream of the charge needs to display or reconcile against.
  */
 @Component
 public class BillingClient {
@@ -25,11 +29,14 @@ public class BillingClient {
 
     private final String baseUrl;
     private final String chargePath;
+    private final CardMask cardMask;
 
     public BillingClient(@Value("${clients.billing.baseUrl}") String baseUrl,
-                         @Value("${clients.billing.chargePath}") String chargePath) {
+                         @Value("${clients.billing.chargePath}") String chargePath,
+                         CardMask cardMask) {
         this.baseUrl = baseUrl;
         this.chargePath = chargePath;
+        this.cardMask = cardMask;
     }
 
     /**
@@ -40,9 +47,16 @@ public class BillingClient {
      */
     public BillingChargeView charge(String invoiceId, String cardNumber, String currency) {
         String url = baseUrl + chargePath.replace("{invoiceId}", invoiceId);
-        log.info("charging via billing-service invoiceId={} url={}", invoiceId, url);
 
-        // Stubbed for the fixture: the real client POSTs and deserializes into
+        // PCI: the full PAN does not leave this method. billing-service reconciles and displays
+        // on the last four, which is what the mask preserves.
+        String maskedCardNumber = cardMask.mask(cardNumber);
+
+        log.info("charging via billing-service invoiceId={} url={} cardNumber={}",
+                invoiceId, url, maskedCardNumber);
+
+        // Stubbed for the fixture: the real client POSTs
+        // { cardNumber: maskedCardNumber, currency } to the charge path and deserializes into
         // BillingChargeView with the strict ObjectMapper configured in application.yml.
         return new BillingChargeView(
                 "chg_9f3b7c21",

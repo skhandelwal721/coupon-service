@@ -42,7 +42,7 @@ public class RedemptionController {
     public RedemptionReceipt redeem(@Valid @RequestBody RedemptionRequest request) {
         velocityGuard.check(request);
         RedemptionReceipt receipt = redemptionService.redeem(request);
-        analytics.publish(receipt);
+        analytics.publish(receipt, request);
         return receipt;
     }
 
