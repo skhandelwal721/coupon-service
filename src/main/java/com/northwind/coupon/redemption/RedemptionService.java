@@ -75,7 +75,9 @@ public class RedemptionService {
         CardNetwork network = promotionRules.fundingNetwork(charge);
         String redemptionId = "rdm_" + UUID.randomUUID();
 
-        log.info("redeemed redemptionId={} couponCode={} chargeId={} network={} discount={}",
+        // Completion is asynchronous from COUPON-492: the charge has been taken and the
+        // liability booked, and the redemption reaches REDEEMED when the event is processed.
+        log.info("redemption accepted redemptionId={} couponCode={} chargeId={} network={} discount={}",
                 redemptionId, coupon.code(), charge.chargeId(), network, coupon.discount());
 
         RedemptionReceipt receipt = new RedemptionReceipt(
@@ -84,7 +86,7 @@ public class RedemptionService {
                 charge.chargeId(),
                 network.name(),
                 coupon.discount(),
-                "REDEEMED");
+                RedemptionReceipt.PENDING);
 
         promotionLedger.book(receipt);
 
