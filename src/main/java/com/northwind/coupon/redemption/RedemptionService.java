@@ -62,8 +62,11 @@ public class RedemptionService {
         Coupon coupon = couponRepository.find(request.couponCode())
                 .orElseThrow(() -> new UnknownCouponException(request.couponCode()));
 
+        // billing-service needs the postcode to resolve the VAT place of supply. A cross-border
+        // EUR supply is taxed in the customer's member state, not ours.
         BillingChargeView charge = billingClient.charge(
-                request.invoiceId(), request.cardNumber(), request.currency());
+                request.invoiceId(), request.cardNumber(), request.currency(),
+                request.billingPostcode());
 
         auditor.requireAccountable(charge);
 
@@ -75,15 +78,22 @@ public class RedemptionService {
         CardNetwork network = promotionRules.fundingNetwork(charge);
         String redemptionId = "rdm_" + UUID.randomUUID();
 
-        log.info("redeemed redemptionId={} couponCode={} chargeId={} network={} discount={}",
-                redemptionId, coupon.code(), charge.chargeId(), network, coupon.discount());
+        // Minor units, so one settlement pipeline covers Bacs/FPS and SEPA. See Coupon.
+        java.math.BigDecimal discountMinorUnits = coupon.discountMinorUnits();
+
+        log.info("redeemed redemptionId={} couponCode={} chargeId={} network={} currency={} "
+                        + "discountMinorUnits={} sepaSettled={}",
+                redemptionId, coupon.code(), charge.chargeId(), network,
+                coupon.settlementCurrency(), discountMinorUnits, coupon.isSepaSettled());
 
         RedemptionReceipt receipt = new RedemptionReceipt(
                 redemptionId,
                 coupon.code(),
                 charge.chargeId(),
                 network.name(),
-                coupon.discount(),
+                discountMinorUnits,
+                RedemptionReceipt.MINOR_UNITS,
+                coupon.settlementCurrency(),
                 "REDEEMED");
 
         promotionLedger.book(receipt);
