@@ -34,6 +34,21 @@ events:
   billing:
     chargeCompletedTopic: northwind.billing.charge.completed
 
+# --------------------------------------------------------------------------------------
+# SEPA / EUR settlement — COUPON-490
+#
+# The euro catalogue settles through SEPA rather than Bacs/FPS. Amounts on the receipt and on
+# the settlement instruction are carried in minor units, which is what ISO 20022 InstdAmt
+# expects, and the structured address element is restricted to alphanumerics by the scheme
+# implementation guidelines.
+# --------------------------------------------------------------------------------------
+settlement:
+  sepa:
+    enabled: true
+    currencies: GBP,EUR
+    amountRepresentation: MINOR_UNITS
+    structuredAddress: true
+
 analytics:
   redemptionEndpoint: https://analytics.northwind.example/v1/events/redemption
 

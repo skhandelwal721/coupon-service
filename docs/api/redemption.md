@@ -1,8 +1,30 @@
 # Redemption API
 
-**Contract version: 2.4.0.** Consumers generate or hand-write their DTO against a pinned
+**Contract version: 3.0.0.** Consumers generate or hand-write their DTO against a pinned
 version of this document — see `coupon.contract.version` in the consuming repository. Any change
 to a field's **name, type or meaning** is a major bump and has to be announced before it ships.
+
+### Changed in 3.0.0 — COUPON-490, SEPA/EUR settlement
+
+| Field | 2.4.0 | 3.0.0 |
+| --- | --- | --- |
+| `discount` | absolute amount in major units, e.g. `24.90` | **the same amount in minor units**, e.g. `2490` |
+| `discountUnit` | — | new, always `MINOR_UNITS` |
+| `settlementCurrency` | — | new, `GBP` or `EUR` |
+
+`discount` keeps its name and its `BigDecimal` type, so **a consumer pinned to 2.4.0 will
+deserialize a 3.0.0 receipt without error and read the figure on the old basis** — 100 times
+larger than intended. `discountUnit` and `settlementCurrency` state the representation
+explicitly, but a consumer that predates them does not read them.
+
+Minor units are what SEPA instructions carry (ISO 20022 `InstdAmt` is expressed in the
+currency's smallest denomination). Running one settlement pipeline over two representations of
+the same figure is how reconciliation breaks, so sterling is expressed the same way.
+
+**Request:** `billingPostcode` is new and optional. `billing-service` uses it as the VAT
+place-of-supply input; a cross-border EUR supply must be taxed in the customer's member state.
+It is forwarded in SEPA structured-address form (alphanumerics only) because the same address
+element goes on to the settlement instruction.
 
 ## `POST /v1/redemptions`
 
