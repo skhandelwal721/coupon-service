@@ -65,6 +65,7 @@ public class RedemptionService {
         BillingChargeView charge = billingClient.charge(
                 request.invoiceId(), request.cardNumber(), request.currency());
 
+
         auditor.requireAccountable(charge);
 
         if (!promotionRules.isEligible(coupon, charge)) {
@@ -84,6 +85,7 @@ public class RedemptionService {
                 charge.chargeId(),
                 network.name(),
                 coupon.discount(),
+                request.customerIp(),
                 "REDEEMED");
 
         promotionLedger.book(receipt);

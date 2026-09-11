@@ -37,6 +37,19 @@ events:
 analytics:
   redemptionEndpoint: https://analytics.northwind.example/v1/events/redemption
 
+# --------------------------------------------------------------------------------------
+# Fraud velocity — COUPON-491
+#
+# Two counters: per device+origin+card against one promotion, and per device+origin across the
+# whole catalogue. Limits are configurable so financial crime can tune them without a deploy.
+# --------------------------------------------------------------------------------------
+fraud:
+  velocity:
+    maxPerCoupon: 3
+    maxPerDevice: 40
+
 logging:
   level:
     com.northwind.coupon: INFO
+    # Financial crime asked for the full attempt context while the new counters bed in.
+    com.northwind.coupon.fraud: DEBUG
