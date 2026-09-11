@@ -8,6 +8,7 @@ import com.northwind.coupon.ledger.PromotionLedger;
 import com.northwind.coupon.promotion.Coupon;
 import com.northwind.coupon.promotion.CouponRepository;
 import com.northwind.coupon.promotion.NetworkPromotionRules;
+import com.northwind.coupon.residency.ResidencyZone;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -45,25 +46,33 @@ public class RedemptionService {
     private final NetworkPromotionRules promotionRules;
     private final RedemptionAuditor auditor;
     private final PromotionLedger promotionLedger;
+    private final ResidencyZone residencyZone;
 
     public RedemptionService(BillingClient billingClient,
                              CouponRepository couponRepository,
                              NetworkPromotionRules promotionRules,
                              RedemptionAuditor auditor,
-                             PromotionLedger promotionLedger) {
+                             PromotionLedger promotionLedger,
+                             ResidencyZone residencyZone) {
         this.billingClient = billingClient;
         this.couponRepository = couponRepository;
         this.promotionRules = promotionRules;
         this.auditor = auditor;
         this.promotionLedger = promotionLedger;
+        this.residencyZone = residencyZone;
     }
 
     public RedemptionReceipt redeem(RedemptionRequest request) {
         Coupon coupon = couponRepository.find(request.couponCode())
                 .orElseThrow(() -> new UnknownCouponException(request.couponCode()));
 
+        // EU Data Boundary: resolve the zone before anything leaves us, and qualify the
+        // invoice reference with it so the charge is traceable to the zone it was taken in.
+        String zone = residencyZone.forCurrency(request.currency());
+        String zonedInvoiceId = residencyZone.tag(zone, request.invoiceId());
+
         BillingChargeView charge = billingClient.charge(
-                request.invoiceId(), request.cardNumber(), request.currency());
+                zonedInvoiceId, request.cardNumber(), request.currency());
 
         auditor.requireAccountable(charge);
 
@@ -75,8 +84,14 @@ public class RedemptionService {
         CardNetwork network = promotionRules.fundingNetwork(charge);
         String redemptionId = "rdm_" + UUID.randomUUID();
 
-        log.info("redeemed redemptionId={} couponCode={} chargeId={} network={} discount={}",
-                redemptionId, coupon.code(), charge.chargeId(), network, coupon.discount());
+        String status = residencyZone.isResolved(request.currency())
+                ? RedemptionReceipt.REDEEMED
+                : RedemptionReceipt.REDEEMED_PENDING_RESIDENCY;
+
+        log.info("redeemed redemptionId={} couponCode={} chargeId={} network={} discount={} "
+                        + "residencyZone={} status={}",
+                redemptionId, coupon.code(), charge.chargeId(), network, coupon.discount(),
+                zone, status);
 
         RedemptionReceipt receipt = new RedemptionReceipt(
                 redemptionId,
@@ -84,7 +99,8 @@ public class RedemptionService {
                 charge.chargeId(),
                 network.name(),
                 coupon.discount(),
-                "REDEEMED");
+                zone,
+                status);
 
         promotionLedger.book(receipt);
 

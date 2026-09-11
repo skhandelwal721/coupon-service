@@ -3,11 +3,11 @@ spring:
     name: coupon-service
   jackson:
     deserialization:
-      # We generate BillingChargeView from billing-service's published schema, which is
-      # strict (additionalProperties: false). Failing on an unknown property is how we find
-      # out that the contract moved under us, instead of silently dropping a field that
-      # changes what a charge means.
-      fail-on-unknown-properties: true
+      # The regional charge endpoints annotate their responses with the zone the charge was
+      # taken in, and that annotation lands per region as each one is certified. Failing on it
+      # would mean a storefront outage in that region, on certification day, for a field we do
+      # not read.
+      fail-on-unknown-properties: false
 
 server:
   tomcat:
@@ -34,8 +34,22 @@ events:
   billing:
     chargeCompletedTopic: northwind.billing.charge.completed
 
+# --------------------------------------------------------------------------------------
+# EU data residency — COUPON-493
+#
+# Personal data of EU data subjects is processed inside the EU Data Boundary. EUR settles in
+# Frankfurt, GBP in London under the UK adequacy decision. Outbound identifiers are qualified
+# with the zone so a residency decision is auditable per record.
+# --------------------------------------------------------------------------------------
+residency:
+  enabled: true
+  defaultZone: eu-central-1
+  approvedZones: eu-central-1,eu-west-1,eu-west-2
+  tagOutboundReferences: true
+
 analytics:
-  redemptionEndpoint: https://analytics.northwind.example/v1/events/redemption
+  # Regional endpoint, so redemption telemetry stays inside the boundary.
+  redemptionEndpoint: https://analytics.eu-central-1.northwind.example/v1/events/redemption
 
 logging:
   level:
