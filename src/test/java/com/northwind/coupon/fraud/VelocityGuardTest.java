@@ -46,6 +46,6 @@ class VelocityGuardTest {
     }
 
     private static RedemptionRequest request(String couponCode) {
-        return new RedemptionRequest(couponCode, "inv-1001", "4111111111111111", "GBP");
+        return new RedemptionRequest(couponCode, "inv-1001", "4111111111111111", "GBP", "GB-EC2A4BX");
     }
 }

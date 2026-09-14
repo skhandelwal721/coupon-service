@@ -18,6 +18,15 @@ public record RedemptionRequest(
 
         @NotBlank(message = "currency is required")
         @Pattern(regexp = "^(GBP|EUR)$", message = "currency must be GBP or EUR")
-        String currency
+        String currency,
+
+        /**
+         * The customer's billing postcode, in storefront display form.
+         *
+         * <p>New for COUPON-490. billing-service uses it as the VAT place-of-supply input, and
+         * a cross-border EUR supply has to be taxed in the customer's member state. Optional so
+         * the promotions backfill job, which has no postcode for historic orders, keeps working.
+         */
+        String billingPostcode
 ) {
 }
