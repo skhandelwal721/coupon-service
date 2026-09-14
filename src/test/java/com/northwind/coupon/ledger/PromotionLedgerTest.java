@@ -31,6 +31,33 @@ class PromotionLedgerTest {
      * meant when the account was opened — {@code discount} is a {@link BigDecimal} either way.
      * A change in the meaning of that field leaves this test green and the ledger wrong.
      */
+    /**
+     * The basis regression for COUPON-490.
+     *
+     * <p>These accounts hold major units. A receipt carrying 24.90 must book 24.90 — not 2490.
+     * COUPON-490 booked {@code discountMinorUnits} here and overstated network liability by a
+     * factor of one hundred, which is the figure we invoice the card networks from.
+     */
+    @Test
+    void booksMajorUnitsNotMinorUnits() {
+        PromotionLedger ledger = new PromotionLedger();
+        ledger.book(receipt("VISA", "24.90"));
+
+        assertEquals(new BigDecimal("24.90"), ledger.liabilityFor(CardNetwork.VISA),
+                "the ledger books major units — booking minor units here overstates the"
+                        + " liability we invoice the networks from by 100x");
+    }
+
+    /** A euro promotion books on the same basis as a sterling one. */
+    @Test
+    void booksTheSameBasisRegardlessOfSettlementCurrency() {
+        PromotionLedger ledger = new PromotionLedger();
+        ledger.book(new RedemptionReceipt("rdm_eur", "NW-SEPA-25", "chg_1", "VISA",
+                new BigDecimal("25.00"), new BigDecimal("2500"), "EUR", "REDEEMED"));
+
+        assertEquals(new BigDecimal("25.00"), ledger.liabilityFor(CardNetwork.VISA));
+    }
+
     @Test
     void everyFundingNetworkHasALiabilityAccount() {
         PromotionLedger ledger = new PromotionLedger();
