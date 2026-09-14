@@ -29,14 +29,15 @@ class RedemptionReceiptContractTest {
      * The load-bearing assertion.
      *
      * <p>{@code discount} is the absolute amount off in <strong>major units</strong>. A 24.90
-     * discount serializes as {@code 24.90}, not {@code 2490}. Contract 2.4.0 published this
-     * meaning and every consumer pinned to it depends on it.
+     * discount is published as 24.90, not 2490 — a hundred-fold difference in magnitude, which
+     * is what {@link #assertAmountEquals} checks. Contract 2.4.0 published this meaning and
+     * every consumer pinned to it depends on it.
      */
     @Test
     void discountIsPublishedInMajorUnits() throws Exception {
         JsonNode receipt = mapper.valueToTree(receipt("24.90"));
 
-        assertEquals(new BigDecimal("24.90"), receipt.get("discount").decimalValue(),
+        assertAmountEquals("24.90", receipt.get("discount").decimalValue(),
                 "discount must stay an absolute amount in major units — a consumer pinned to"
                         + " 2.4.0 reads this field and cannot tell if the basis changed");
     }
@@ -46,7 +47,8 @@ class RedemptionReceiptContractTest {
     void minorUnitsArePublishedInTheirOwnField() throws Exception {
         JsonNode receipt = mapper.valueToTree(receipt("24.90"));
 
-        assertEquals(new BigDecimal("2490"), receipt.get("discountMinorUnits").decimalValue());
+        assertAmountEquals("2490", receipt.get("discountMinorUnits").decimalValue(),
+                "the SEPA representation belongs in its own field");
     }
 
     /** Both fields describe one amount, so they can never disagree. */
@@ -54,16 +56,18 @@ class RedemptionReceiptContractTest {
     void theTwoRepresentationsAgree() {
         RedemptionReceipt receipt = receipt("24.90");
 
-        assertEquals(RedemptionReceipt.toMinorUnits(receipt.discount()),
-                receipt.discountMinorUnits());
+        assertEquals(0,
+                RedemptionReceipt.toMinorUnits(receipt.discount())
+                        .compareTo(receipt.discountMinorUnits()));
     }
 
     @Test
     void agreementHoldsForEveryCatalogueAmount() {
         for (String amount : new String[] {"10.00", "15.00", "24.90", "25.00", "249.00"}) {
             RedemptionReceipt receipt = receipt(amount);
-            assertEquals(RedemptionReceipt.toMinorUnits(receipt.discount()),
-                    receipt.discountMinorUnits(),
+            assertEquals(0,
+                    RedemptionReceipt.toMinorUnits(receipt.discount())
+                            .compareTo(receipt.discountMinorUnits()),
                     "representations disagree for " + amount);
         }
     }
@@ -80,7 +84,8 @@ class RedemptionReceiptContractTest {
         assertEquals("NW-SEPA-25", receipt.get("couponCode").asText());
         assertEquals("VISA", receipt.get("fundingNetwork").asText());
         assertEquals("REDEEMED", receipt.get("status").asText());
-        assertEquals(new BigDecimal("24.90"), receipt.get("discount").decimalValue());
+        assertAmountEquals("24.90", receipt.get("discount").decimalValue(),
+                "the field a 2.4.0 consumer reads");
     }
 
     /** The new fields are additive: present, and not replacing anything. */
@@ -100,18 +105,31 @@ class RedemptionReceiptContractTest {
         RedemptionReceipt legacy = new RedemptionReceipt("rdm_1", "NW-VISA-10", "chg_1",
                 "VISA", new BigDecimal("10.00"), "REDEEMED");
 
-        assertEquals(new BigDecimal("10.00"), legacy.discount());
-        assertEquals(new BigDecimal("1000"), legacy.discountMinorUnits());
+        assertAmountEquals("10.00", legacy.discount(), "documented basis preserved");
+        assertAmountEquals("1000", legacy.discountMinorUnits(), "derived, not guessed");
         assertEquals("GBP", legacy.settlementCurrency());
     }
 
     /** A fraction of a minor unit cannot be instructed, so conversion truncates. */
     @Test
     void minorUnitConversionTruncates() {
-        assertEquals(new BigDecimal("1249"),
-                RedemptionReceipt.toMinorUnits(new BigDecimal("12.499")));
-        assertEquals(new BigDecimal("1250"),
-                RedemptionReceipt.toMinorUnits(new BigDecimal("12.501")));
+        assertAmountEquals("1249", RedemptionReceipt.toMinorUnits(new BigDecimal("12.499")),
+                "a fraction of a minor unit cannot be instructed");
+        assertAmountEquals("1250", RedemptionReceipt.toMinorUnits(new BigDecimal("12.501")),
+                "a fraction of a minor unit cannot be instructed");
+    }
+
+    /**
+     * Compares magnitude, not scale.
+     *
+     * <p>The defect this whole class exists for is a hundred-fold magnitude error, and that is
+     * what has to be asserted. Trailing-zero scale is a JSON representation detail — Jackson
+     * normalises {@code 24.90} to {@code 24.9} through a tree node — and pinning it would make
+     * these tests fail for a cosmetic reason and stop being trusted.
+     */
+    private static void assertAmountEquals(String expected, BigDecimal actual, String why) {
+        assertEquals(0, new BigDecimal(expected).compareTo(actual),
+                why + " — expected " + expected + " but was " + actual);
     }
 
     private static RedemptionReceipt receipt(String discount) {
