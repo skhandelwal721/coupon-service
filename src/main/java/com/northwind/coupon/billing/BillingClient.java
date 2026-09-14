@@ -3,7 +3,6 @@ package com.northwind.coupon.billing;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
-import com.northwind.coupon.sepa.SepaAddressNormaliser;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -21,9 +20,17 @@ import java.math.BigDecimal;
  *
  * <p>Since COUPON-490 we also send {@code billingPostcode}. billing-service uses it as the VAT
  * place-of-supply input, and a cross-border EUR supply must be taxed in the customer's member
- * state rather than ours. It is sent in SEPA structured-address form — see
- * {@link com.northwind.coupon.sepa.SepaAddressNormaliser} — because the same address element
- * goes on to the settlement instruction and the clearing house rejects separators.
+ * state rather than ours.
+ *
+ * <p><strong>It is sent in the form the storefront collected it in</strong> — {@code "DE-10115"},
+ * {@code "EC2A 4BX"} — and is not normalised on the way out. COUPON-490 applied the SEPA
+ * structured-address normalisation here, which stripped the separator and left
+ * {@code "DE10115"}. billing-service resolves the member state by matching the country prefix
+ * ({@code PlaceOfSupply.forPostcode}), did not match, and fell back to its home jurisdiction —
+ * so every euro charge was taxed at the UK rate and declared in the wrong member state, with
+ * nothing raised anywhere. SEPA normalisation belongs on the settlement instruction, which is
+ * the only place the scheme's address restrictions apply. See
+ * {@link com.northwind.coupon.sepa.SepaAddressNormaliser}.
  */
 @Component
 public class BillingClient {
@@ -32,14 +39,11 @@ public class BillingClient {
 
     private final String baseUrl;
     private final String chargePath;
-    private final SepaAddressNormaliser addressNormaliser;
 
     public BillingClient(@Value("${clients.billing.baseUrl}") String baseUrl,
-                         @Value("${clients.billing.chargePath}") String chargePath,
-                         SepaAddressNormaliser addressNormaliser) {
+                         @Value("${clients.billing.chargePath}") String chargePath) {
         this.baseUrl = baseUrl;
         this.chargePath = chargePath;
-        this.addressNormaliser = addressNormaliser;
     }
 
     /**
@@ -51,16 +55,13 @@ public class BillingClient {
     public BillingChargeView charge(String invoiceId, String cardNumber, String currency,
                                    String billingPostcode) {
         String url = baseUrl + chargePath.replace("{invoiceId}", invoiceId);
-
-        // SEPA structured-address form. The same element goes on to the settlement
-        // instruction, so it has to be clearing-house clean before it leaves us.
-        String sepaPostcode = addressNormaliser.normalise(billingPostcode);
+        String postcode = postcodeForCharge(billingPostcode);
 
         log.info("charging via billing-service invoiceId={} url={} currency={} postcodeSent={}",
-                invoiceId, url, currency, sepaPostcode != null);
+                invoiceId, url, currency, postcode != null);
 
         // Stubbed for the fixture: the real client POSTs
-        // { cardNumber, currency, billingPostcode: sepaPostcode } to the charge path and
+        // { cardNumber, currency, billingPostcode: postcode } to the charge path and
         // deserializes into BillingChargeView with the strict ObjectMapper configured in
         // application.yml.
         return new BillingChargeView(
@@ -73,5 +74,21 @@ public class BillingClient {
                 "VISA",
                 "wp_4f8a21c7",
                 "CHARGED");
+    }
+
+    /**
+     * The postcode we put on the charge request: exactly what the storefront collected.
+     *
+     * <p><strong>Not normalised.</strong> billing-service resolves the VAT member state by
+     * matching the country prefix on this string ({@code PlaceOfSupply.forPostcode}), so
+     * stripping the separator silently changes which country's tax rate is applied. That is
+     * what COUPON-490 did.
+     *
+     * <p>Package-visible so {@code BillingClientTest} can pin it — the jurisdiction
+     * billing-service derives depends on this exact value, which makes it part of our outbound
+     * contract with them rather than an implementation detail.
+     */
+    String postcodeForCharge(String billingPostcode) {
+        return billingPostcode;
     }
 }

@@ -56,6 +56,15 @@ alarms:
     threshold: 1
     periods: 6
     priority: P2
+  # COUPON-495. The basis of a money field is the one thing no type or schema can check, so it
+  # gets an alarm instead: the ledger and the day's attribution export are both reconciled
+  # against the redemption count, and a basis change moves the ratio by orders of magnitude.
+  - name: PromotionLiabilityPerRedemptionOutOfBand
+    metric: custom:coupon.ledger.liability.per.redemption
+    comparison: GreaterThanThreshold
+    threshold: 500
+    periods: 1
+    priority: P1
   - name: UnmatchedChargebackRate
     metric: custom:coupon.chargeback.unmatched.rate
     comparison: GreaterThanThreshold

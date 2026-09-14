@@ -14,7 +14,11 @@ import java.util.List;
  *
  * <p>One row per redemption, and a total that finance books as the day's promotional spend.
  * The figure comes from {@code discount} on the redemption receipt, which
- * {@code docs/api/redemption.md} documents as an absolute currency amount.
+ * {@code docs/api/redemption.md} documents as an absolute currency amount <strong>in major
+ * units</strong>. Never build this export from {@code discountMinorUnits}: COUPON-490 put
+ * minor units on {@code discount} and every ordinary promotion then exceeded the ceiling below,
+ * so the largest promotions were held as exceptions and the day's spend was understated by
+ * whatever they came to.
  *
  * <p><strong>The plausibility check is a magnitude cap, not a semantic one.</strong> A discount
  * larger than {@link #MAX_PLAUSIBLE_DISCOUNT} is held as an exception on the assumption that a

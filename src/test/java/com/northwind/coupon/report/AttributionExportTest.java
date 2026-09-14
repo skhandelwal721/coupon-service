@@ -57,6 +57,37 @@ class AttributionExportTest {
                 "there is no floor on this check, so an understated discount is invisible here");
     }
 
+    /**
+     * The ceiling regression for COUPON-490.
+     *
+     * <p>The plausibility ceiling is 1000.00 and it is expressed in major units. When
+     * COUPON-490 put minor units on {@code discount}, an ordinary 24.90 promotion arrived as
+     * 2490, cleared the ceiling, and was held as an exception instead of exported — so the
+     * day's promotional spend silently lost its largest promotions.
+     */
+    @Test
+    void exportsAnOrdinaryPromotionRatherThanHoldingIt() {
+        AttributionExport.Export result = export.build("2026-09-14", List.of(
+                receipt("rdm_1", "24.90"),
+                receipt("rdm_2", "249.00")));
+
+        assertEquals(2, result.rows().size(),
+                "an ordinary promotion in major units must not exceed the plausibility ceiling");
+        assertEquals(new BigDecimal("273.90"), result.total());
+        assertTrue(result.exceptions().isEmpty());
+    }
+
+    /** Stated plainly: the same figures on the wrong basis would be held. */
+    @Test
+    void theCeilingIsExpressedInMajorUnits() {
+        AttributionExport.Export onMinorUnits = export.build("2026-09-14", List.of(
+                receipt("rdm_1", "2490")));
+
+        assertEquals(0, onMinorUnits.rows().size());
+        assertEquals(1, onMinorUnits.exceptions().size(),
+                "this is what COUPON-490 did to every ordinary promotion");
+    }
+
     private static RedemptionReceipt receipt(String id, String discount) {
         return new RedemptionReceipt(id, "NW-VISA-10", "chg_1",
                 "VISA", new BigDecimal(discount), "REDEEMED");

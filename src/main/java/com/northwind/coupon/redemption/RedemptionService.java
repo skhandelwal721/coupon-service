@@ -63,7 +63,8 @@ public class RedemptionService {
                 .orElseThrow(() -> new UnknownCouponException(request.couponCode()));
 
         // billing-service needs the postcode to resolve the VAT place of supply. A cross-border
-        // EUR supply is taxed in the customer's member state, not ours.
+        // EUR supply is taxed in the customer's member state, not ours. It goes in the form the
+        // storefront collected it in — see BillingClient.
         BillingChargeView charge = billingClient.charge(
                 request.invoiceId(), request.cardNumber(), request.currency(),
                 request.billingPostcode());
@@ -78,21 +79,25 @@ public class RedemptionService {
         CardNetwork network = promotionRules.fundingNetwork(charge);
         String redemptionId = "rdm_" + UUID.randomUUID();
 
-        // Minor units, so one settlement pipeline covers Bacs/FPS and SEPA. See Coupon.
+        // Both representations of one amount. `discount` carries the documented basis — major
+        // units — and `discountMinorUnits` carries the SEPA form. They are derived from the
+        // same figure so they cannot drift apart.
+        java.math.BigDecimal discount = coupon.discount();
         java.math.BigDecimal discountMinorUnits = coupon.discountMinorUnits();
 
         log.info("redeemed redemptionId={} couponCode={} chargeId={} network={} currency={} "
-                        + "discountMinorUnits={} sepaSettled={}",
+                        + "discount={} discountMinorUnits={} sepaSettled={}",
                 redemptionId, coupon.code(), charge.chargeId(), network,
-                coupon.settlementCurrency(), discountMinorUnits, coupon.isSepaSettled());
+                coupon.settlementCurrency(), discount, discountMinorUnits,
+                coupon.isSepaSettled());
 
         RedemptionReceipt receipt = new RedemptionReceipt(
                 redemptionId,
                 coupon.code(),
                 charge.chargeId(),
                 network.name(),
+                discount,
                 discountMinorUnits,
-                RedemptionReceipt.MINOR_UNITS,
                 coupon.settlementCurrency(),
                 "REDEEMED");
 

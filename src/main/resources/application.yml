@@ -46,8 +46,13 @@ settlement:
   sepa:
     enabled: true
     currencies: GBP,EUR
-    amountRepresentation: MINOR_UNITS
-    structuredAddress: true
+    # The instruction carries minor units; the receipt carries both representations in their own
+    # fields. See docs/api/redemption.md 3.1.0.
+    instructionAmountRepresentation: MINOR_UNITS
+    # Structured-address normalisation applies to the settlement instruction ONLY. It must not
+    # be applied to the charge request — billing-service reads that postcode as its VAT
+    # place-of-supply input and matches the country prefix including the separator.
+    structuredAddress: settlement-instruction-only
 
 analytics:
   redemptionEndpoint: https://analytics.northwind.example/v1/events/redemption

@@ -1,30 +1,53 @@
 # Redemption API
 
-**Contract version: 3.0.0.** Consumers generate or hand-write their DTO against a pinned
+**Contract version: 3.1.0.** Consumers generate or hand-write their DTO against a pinned
 version of this document — see `coupon.contract.version` in the consuming repository. Any change
 to a field's **name, type or meaning** is a major bump and has to be announced before it ships.
 
-### Changed in 3.0.0 — COUPON-490, SEPA/EUR settlement
+> ### ⚠️ 3.0.0 is WITHDRAWN — do not implement
+>
+> 3.0.0 reinterpreted `discount` from major units to minor units while leaving the field's name
+> and `BigDecimal` type unchanged. That is a change of meaning with no detectable signature: a
+> consumer pinned to 2.4.0 deserialized it without error and read every discount **100 times
+> too small**.
+>
+> If you implemented 3.0.0, pin to **3.1.0** and read `discountMinorUnits` for the SEPA
+> representation. If you are on **2.4.0, you require no migration** — 3.1.0 restores the meaning
+> 2.4.0 published.
 
-| Field | 2.4.0 | 3.0.0 |
-| --- | --- | --- |
-| `discount` | absolute amount in major units, e.g. `24.90` | **the same amount in minor units**, e.g. `2490` |
-| `discountUnit` | — | new, always `MINOR_UNITS` |
-| `settlementCurrency` | — | new, `GBP` or `EUR` |
+### Changed in 3.1.0 — COUPON-495, correcting 3.0.0
 
-`discount` keeps its name and its `BigDecimal` type, so **a consumer pinned to 2.4.0 will
-deserialize a 3.0.0 receipt without error and read the figure on the old basis** — 100 times
-larger than intended. `discountUnit` and `settlementCurrency` state the representation
-explicitly, but a consumer that predates them does not read them.
+| Field | 2.4.0 | 3.0.0 (withdrawn) | 3.1.0 |
+| --- | --- | --- | --- |
+| `discount` | absolute amount, **major units**, e.g. `24.90` | *the same amount in minor units*, `2490` | **absolute amount, major units, `24.90` — as 2.4.0** |
+| `discountMinorUnits` | — | — | **new**, the same amount in the smallest denomination, `2490` |
+| `discountUnit` | — | `MINOR_UNITS` | **removed** — it described a basis that no longer varies |
+| `settlementCurrency` | — | new | unchanged, `GBP` or `EUR` |
 
-Minor units are what SEPA instructions carry (ISO 20022 `InstdAmt` is expressed in the
-currency's smallest denomination). Running one settlement pipeline over two representations of
-the same figure is how reconciliation breaks, so sterling is expressed the same way.
+**3.1.0 is wire-compatible with 2.4.0.** Every field 2.4.0 declared is present, with the same
+name, type and meaning. The two new fields are additive and a 2.4.0 consumer ignores them.
 
-**Request:** `billingPostcode` is new and optional. `billing-service` uses it as the VAT
-place-of-supply input; a cross-border EUR supply must be taxed in the customer's member state.
-It is forwarded in SEPA structured-address form (alphanumerics only) because the same address
-element goes on to the settlement instruction.
+`discount` and `discountMinorUnits` are derived from one figure and cannot disagree —
+`RedemptionReceiptContractTest` asserts that on every catalogue amount.
+
+#### Why this took a second change
+
+Minor units are genuinely what SEPA instructions carry (ISO 20022 `InstdAmt` is expressed in the
+currency's smallest denomination). The mistake was not adding that representation — it was
+putting it on an existing field instead of a new one.
+
+**A new representation gets a new name. It does not redefine an existing one.** A field that
+keeps its name and its wire type while changing what it means defeats the compiler, schema
+validation, every consumer's deserializer, and the producing repository's own test suite. There
+is no mechanism that catches it, which is why the rule is to rename rather than redefine.
+
+**Request:** `billingPostcode` is optional and is sent **exactly as the storefront collected
+it** — `DE-10115`, `EC2A 4BX`. `billing-service` uses it as the VAT place-of-supply input and
+resolves the member state by matching the country prefix, separator included. 3.0.0 forwarded it
+in SEPA structured-address form (alphanumerics only); the prefix stopped matching, billing fell
+back to the merchant's home jurisdiction, and every euro charge was taxed at the UK rate and
+declared in the wrong member state. SEPA normalisation applies to the settlement instruction
+only.
 
 ## `POST /v1/redemptions`
 
