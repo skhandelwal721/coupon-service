@@ -2,8 +2,12 @@ package com.northwind.coupon.redemption;
 
 import com.northwind.coupon.analytics.RedemptionAnalyticsClient;
 import com.northwind.coupon.audit.RedemptionAuditor;
+import com.northwind.coupon.fraud.DeviceFingerprint;
+import com.northwind.coupon.fraud.VelocityCounterStore;
 import com.northwind.coupon.fraud.VelocityGuard;
 import jakarta.validation.Valid;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -25,16 +29,21 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/v1/redemptions")
 public class RedemptionController {
 
+    private static final Logger log = LoggerFactory.getLogger(RedemptionController.class);
+
     private final RedemptionService redemptionService;
     private final VelocityGuard velocityGuard;
     private final RedemptionAnalyticsClient analytics;
+    private final DeviceFingerprint fingerprints;
 
     public RedemptionController(RedemptionService redemptionService,
                                 VelocityGuard velocityGuard,
-                                RedemptionAnalyticsClient analytics) {
+                                RedemptionAnalyticsClient analytics,
+                                DeviceFingerprint fingerprints) {
         this.redemptionService = redemptionService;
         this.velocityGuard = velocityGuard;
         this.analytics = analytics;
+        this.fingerprints = fingerprints;
     }
 
     @PostMapping
@@ -42,8 +51,32 @@ public class RedemptionController {
     public RedemptionReceipt redeem(@Valid @RequestBody RedemptionRequest request) {
         velocityGuard.check(request);
         RedemptionReceipt receipt = redemptionService.redeem(request);
-        analytics.publish(receipt, request);
+
+        // Best-effort, and deliberately last. The charge has settled and the discount is
+        // booked by this point, so the redemption is already irreversible — an analytics
+        // outage must not turn a completed redemption into a failed checkout. Only the
+        // non-reversible device reference is passed; no personal data leaves here (DPP-4.2).
+        if (!analytics.publish(receipt, fingerprints.logSafeReference(request))) {
+            log.warn("redemption completed but was not published to analytics redemptionId={}",
+                    receipt.redemptionId());
+        }
+
         return receipt;
+    }
+
+    /**
+     * The velocity counter store cannot answer — unreachable, or at its ceiling.
+     *
+     * <p>Fails closed: we refuse the redemption rather than let it through unchecked. A velocity
+     * check that silently passes because its store is down is worse than no check, because
+     * nothing says so. A 503 is the honest signal — this is our availability problem, not the
+     * customer's request being bad.
+     */
+    @ExceptionHandler(VelocityCounterStore.CounterStoreUnavailableException.class)
+    @ResponseStatus(HttpStatus.SERVICE_UNAVAILABLE)
+    public String counterStoreUnavailable(
+            VelocityCounterStore.CounterStoreUnavailableException e) {
+        return e.getMessage();
     }
 
     /** Refused before the charge — no money moved and no discount was booked. */

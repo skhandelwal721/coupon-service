@@ -10,11 +10,18 @@ import jakarta.validation.constraints.Pattern;
  * <p>{@code billingPostcode} arrived with COUPON-490. billing-service uses it as the VAT
  * place-of-supply input.
  *
- * <p>{@code deviceId}, {@code customerIp} and {@code customerEmail} are new for COUPON-491.
+ * <p>{@code deviceId}, {@code customerIp} and {@code customerEmail} arrived with COUPON-491.
  * They are the inputs to device-and-origin velocity checking — see {@link
- * com.northwind.coupon.fraud.DeviceFingerprint}. The device and origin are required, because a
- * velocity check that silently falls back to "unknown" for either is a velocity check that does
- * not run.
+ * com.northwind.coupon.fraud.DeviceFingerprint}.
+ *
+ * <p><strong>All three are optional (COUPON-496).</strong> COUPON-491 made the device and origin
+ * {@code @NotBlank}, which returned 400 to every consumer pinned to contract 2.4.0 — including
+ * `order-service` on the storefront checkout path, so every discounted checkout failed. A
+ * required field cannot be introduced additively (ECS-3.2, ECS-3.6).
+ *
+ * <p>The security intent is met without the validation: an attempt that carries no device or
+ * origin is held to a <strong>stricter</strong> limit by {@code VelocityGuard}, so omitting the
+ * fields tightens the check rather than disabling it.
  */
 public record RedemptionRequest(
 
@@ -45,19 +52,17 @@ public record RedemptionRequest(
         /**
          * The storefront's device identifier for this browser or app install.
          *
-         * <p>Required. A redemption we cannot attribute to a device cannot be velocity checked
-         * against the catalogue-sweep pattern, and an optional field here would mean an attacker
-         * opts out of the check by omitting it.
+         * <p>Optional. An attempt without one cannot be checked against the catalogue-sweep
+         * pattern, so it is held to {@code fraud.velocity.maxUnattributed} instead — a tighter
+         * limit than an attributed attempt gets.
          */
-        @NotBlank(message = "deviceId is required")
         String deviceId,
 
         /**
          * The originating IP, as seen by the storefront edge.
          *
-         * <p>Required, for the same reason as {@code deviceId}.
+         * <p>Optional, and treated the same way as {@code deviceId}.
          */
-        @NotBlank(message = "customerIp is required")
         String customerIp,
 
         /**
