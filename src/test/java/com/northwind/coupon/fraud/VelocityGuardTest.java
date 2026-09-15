@@ -95,6 +95,6 @@ class VelocityGuardTest {
     private static RedemptionRequest request(String couponCode, String deviceId,
                                              String customerIp, String cardNumber) {
         return new RedemptionRequest(couponCode, "inv-1001", cardNumber, "GBP",
-                deviceId, customerIp, "shopper@example.com");
+                "GB-EC2A4BX", deviceId, customerIp, "shopper@example.com");
     }
 }

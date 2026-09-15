@@ -7,6 +7,9 @@ import jakarta.validation.constraints.Pattern;
 /**
  * A redemption attempt.
  *
+ * <p>{@code billingPostcode} arrived with COUPON-490. billing-service uses it as the VAT
+ * place-of-supply input.
+ *
  * <p>{@code deviceId}, {@code customerIp} and {@code customerEmail} are new for COUPON-491.
  * They are the inputs to device-and-origin velocity checking — see {@link
  * com.northwind.coupon.fraud.DeviceFingerprint}. The device and origin are required, because a
@@ -29,6 +32,15 @@ public record RedemptionRequest(
         @NotBlank(message = "currency is required")
         @Pattern(regexp = "^(GBP|EUR)$", message = "currency must be GBP or EUR")
         String currency,
+
+        /**
+         * The customer's billing postcode, in storefront display form.
+         *
+         * <p>From COUPON-490. billing-service uses it as the VAT place-of-supply input, and
+         * a cross-border EUR supply has to be taxed in the customer's member state. Optional so
+         * the promotions backfill job, which has no postcode for historic orders, keeps working.
+         */
+        String billingPostcode,
 
         /**
          * The storefront's device identifier for this browser or app install.

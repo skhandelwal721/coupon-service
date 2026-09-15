@@ -46,7 +46,7 @@ class DeviceFingerprintTest {
     void treatsAMissingComponentAsUnknownRatherThanColliding() {
         String key = fingerprints.keyFor(
                 new RedemptionRequest("NW-VISA-10", "inv-1", "4111111111111111", "GBP",
-                        "dev-1", "203.0.113.7", null));
+                        "GB-EC2A4BX", "dev-1", "203.0.113.7", null));
 
         assertTrue(key.contains("dev-1"));
     }
@@ -54,6 +54,6 @@ class DeviceFingerprintTest {
     private static RedemptionRequest request(String couponCode, String deviceId,
                                              String customerIp, String cardNumber) {
         return new RedemptionRequest(couponCode, "inv-1001", cardNumber, "GBP",
-                deviceId, customerIp, "shopper@example.com");
+                "GB-EC2A4BX", deviceId, customerIp, "shopper@example.com");
     }
 }
