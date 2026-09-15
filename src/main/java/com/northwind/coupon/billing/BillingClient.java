@@ -1,9 +1,9 @@
 package com.northwind.coupon.billing;
 
+import com.northwind.coupon.sepa.SepaAddressNormaliser;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
-import com.northwind.coupon.sepa.SepaAddressNormaliser;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -22,8 +22,12 @@ import java.math.BigDecimal;
  * <p>Since COUPON-490 we also send {@code billingPostcode}. billing-service uses it as the VAT
  * place-of-supply input, and a cross-border EUR supply must be taxed in the customer's member
  * state rather than ours. It is sent in SEPA structured-address form — see
- * {@link com.northwind.coupon.sepa.SepaAddressNormaliser} — because the same address element
- * goes on to the settlement instruction and the clearing house rejects separators.
+ * {@link SepaAddressNormaliser} — because the same address element goes on to the settlement
+ * instruction and the clearing house rejects separators.
+ *
+ * <p>Since COUPON-491 the card number is masked before it leaves us — see {@link CardMask}.
+ * PCI-DSS wants the full PAN in as few places as possible, and the last four is all anything
+ * downstream of the charge needs to display or reconcile against.
  */
 @Component
 public class BillingClient {
@@ -33,13 +37,16 @@ public class BillingClient {
     private final String baseUrl;
     private final String chargePath;
     private final SepaAddressNormaliser addressNormaliser;
+    private final CardMask cardMask;
 
     public BillingClient(@Value("${clients.billing.baseUrl}") String baseUrl,
                          @Value("${clients.billing.chargePath}") String chargePath,
-                         SepaAddressNormaliser addressNormaliser) {
+                         SepaAddressNormaliser addressNormaliser,
+                         CardMask cardMask) {
         this.baseUrl = baseUrl;
         this.chargePath = chargePath;
         this.addressNormaliser = addressNormaliser;
+        this.cardMask = cardMask;
     }
 
     /**
@@ -56,13 +63,18 @@ public class BillingClient {
         // instruction, so it has to be clearing-house clean before it leaves us.
         String sepaPostcode = addressNormaliser.normalise(billingPostcode);
 
-        log.info("charging via billing-service invoiceId={} url={} currency={} postcodeSent={}",
-                invoiceId, url, currency, sepaPostcode != null);
+        // PCI: the full PAN does not leave this method. billing-service reconciles and displays
+        // on the last four, which is what the mask preserves.
+        String maskedCardNumber = cardMask.mask(cardNumber);
+
+        log.info("charging via billing-service invoiceId={} url={} currency={} cardNumber={} "
+                        + "postcodeSent={}",
+                invoiceId, url, currency, maskedCardNumber, sepaPostcode != null);
 
         // Stubbed for the fixture: the real client POSTs
-        // { cardNumber, currency, billingPostcode: sepaPostcode } to the charge path and
-        // deserializes into BillingChargeView with the strict ObjectMapper configured in
-        // application.yml.
+        // { cardNumber: maskedCardNumber, currency, billingPostcode: sepaPostcode } to the
+        // charge path and deserializes into BillingChargeView with the strict ObjectMapper
+        // configured in application.yml.
         return new BillingChargeView(
                 "chg_9f3b7c21",
                 invoiceId,

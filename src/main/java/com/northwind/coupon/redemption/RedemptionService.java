@@ -94,6 +94,7 @@ public class RedemptionService {
                 discountMinorUnits,
                 RedemptionReceipt.MINOR_UNITS,
                 coupon.settlementCurrency(),
+                request.customerIp(),
                 "REDEEMED");
 
         promotionLedger.book(receipt);
