@@ -18,6 +18,9 @@ compute:
 
 environmentVariables:
   BILLING_SERVICE_BASE_URL: http://billing-service.prod.internal
+  # Keys the velocity fingerprints. Injected from the platform secret store — the digest is
+  # only irreversible in practice because this value never leaves the process.
+  FRAUD_VELOCITY_HASH_KEY: secret://coupon-service/fraud-velocity-hash-key
 
 # Upstream services. billing-service is hard: a redemption we cannot reconcile against a
 # charge is a discount we cannot account for, so we hold instead of applying it.
@@ -50,6 +53,14 @@ alarms:
     threshold: 0
     periods: 1
     priority: P1
+  # COUPON-496. The counter store fails closed at its ceiling, which refuses redemptions — so
+  # the ceiling being approached has to be visible well before it is reached.
+  - name: VelocityCounterStoreUtilisation
+    metric: custom:coupon.velocity.tracked.keys
+    comparison: GreaterThanThreshold
+    threshold: 200000
+    periods: 2
+    priority: P2
   - name: VelocityRefusalRate
     metric: custom:coupon.velocity.refused.rate
     comparison: LessThanThreshold

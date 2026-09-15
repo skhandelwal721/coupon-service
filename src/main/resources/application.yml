@@ -51,6 +51,10 @@ settlement:
 
 analytics:
   redemptionEndpoint: https://analytics.northwind.example/v1/events/redemption
+  # Both timeouts are required (ECS-4.4). A connect timeout alone let a platform that accepted
+  # the connection and then stalled hold a checkout thread indefinitely.
+  connectTimeoutMillis: 500
+  requestTimeoutMillis: 500
 
 # --------------------------------------------------------------------------------------
 # Fraud velocity — COUPON-491
@@ -62,9 +66,24 @@ fraud:
   velocity:
     maxPerCoupon: 3
     maxPerDevice: 40
+    # An attempt carrying no device or origin cannot be checked against the catalogue-sweep
+    # pattern, so it is held to a tighter limit rather than waved through. Omitting the fields
+    # tightens the check; there is nothing to gain by leaving them out.
+    maxUnattributed: 2
+    # Counter keys are keyed HMACs of the device, origin and card. The secret comes from the
+    # platform secret store — never commit it, and rotating it resets every live counter.
+    hashKey: ${FRAUD_VELOCITY_HASH_KEY}
+    # Retention. Counters expire after this window, which is both the fraud lookback and the
+    # retention period for the pseudonymised keys (DPP-5.1).
+    windowMinutes: 1440
+    # Hard ceiling on tracked keys (ECS-2.2). At the ceiling we refuse rather than evict a live
+    # counter — refusing is visible and fails closed; evicting silently disables the check.
+    maxTrackedKeys: 250000
 
 logging:
   level:
     com.northwind.coupon: INFO
-    # Financial crime asked for the full attempt context while the new counters bed in.
-    com.northwind.coupon.fraud: DEBUG
+    # No package override. COUPON-491 set this to DEBUG in production while the fraud package
+    # was emitting cardholder data and personal data, which DPP-3.4 does not permit at any
+    # level. The attempt context financial crime asked for is now available without it: every
+    # check logs a non-reversible deviceRef at INFO.

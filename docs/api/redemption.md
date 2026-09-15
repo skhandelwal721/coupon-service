@@ -1,24 +1,43 @@
 # Redemption API
 
-**Contract version: 3.1.0.** Consumers generate or hand-write their DTO against a pinned
+**Contract version: 3.2.0.** Consumers generate or hand-write their DTO against a pinned
 version of this document — see `coupon.contract.version` in the consuming repository. Any change
 to a field's **name, type or meaning** is a major bump and has to be announced before it ships.
 
-### Changed in 3.1.0 — COUPON-491, device and origin velocity
+> ### ⚠️ 3.1.0 was not additive — do not implement
+>
+> 3.1.0 made `deviceId` and `customerIp` **required** on the request. Every consumer pinned to
+> 2.4.0 — including `order-service` on the storefront checkout path — sends neither, so the
+> request was rejected with **HTTP 400 on every discounted checkout**. A required field cannot
+> be introduced additively (ECS-3.2, ECS-3.6).
+>
+> 3.2.0 makes them optional again. **A consumer pinned to 2.4.0 requires no migration.**
 
-Additive on top of 3.0.0.
+### Changed in 3.2.0 — COUPON-496, remediation of 3.1.0
+
+| Field | 3.1.0 | 3.2.0 |
+| --- | --- | --- |
+| `deviceId` | **required** | **optional** |
+| `customerIp` | **required** | **optional** |
+| `customerEmail` | optional | optional, unchanged |
+
+**Omitting the device and origin does not weaken the check.** An attempt that cannot be
+attributed to a device is held to `fraud.velocity.maxUnattributed` — a *tighter* limit than an
+attributed attempt gets — so there is nothing for a client to gain by leaving them out.
+
+The velocity counters derived from these fields are keyed hashes, never the raw values, and they
+expire after `fraud.velocity.windowMinutes`. A data-subject erasure request is satisfied by
+recomputing the fingerprint and forgetting it (DPP-5.2).
+
+### Changed in 3.1.0 — COUPON-491, device and origin velocity
 
 **Request — three new fields:**
 
-| Field | Required | Purpose |
+| Field | Required in 3.1.0 | Purpose |
 | --- | --- | --- |
-| `deviceId` | **yes** | storefront device identifier; input to device velocity |
-| `customerIp` | **yes** | originating IP as seen by the storefront edge |
+| `deviceId` | yes — **corrected to optional in 3.2.0** | storefront device identifier; input to device velocity |
+| `customerIp` | yes — **corrected to optional in 3.2.0** | originating IP as seen by the storefront edge |
 | `customerEmail` | no | investigation linkage only, not part of the automated decision |
-
-`deviceId` and `customerIp` are required because a velocity check that falls back to
-`"unknown"` is a velocity check that does not run — an optional field here would let an attacker
-opt out of the check by omitting it.
 
 **Response — one new field:**
 
