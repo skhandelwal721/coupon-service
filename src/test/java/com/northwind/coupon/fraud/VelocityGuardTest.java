@@ -19,7 +19,7 @@ class VelocityGuardTest {
 
     private static VelocityGuard guard(int maxPerCoupon, int maxPerDevice, int maxUnattributed) {
         return new VelocityGuard(
-                new DeviceFingerprint("test-hash-key"),
+                new DeviceFingerprint("test-hash-key-at-least-32-bytes-long-000"),
                 new InMemoryVelocityCounterStore(Duration.ofHours(24), 10_000, Clock.systemUTC()),
                 maxPerCoupon, maxPerDevice, maxUnattributed);
     }

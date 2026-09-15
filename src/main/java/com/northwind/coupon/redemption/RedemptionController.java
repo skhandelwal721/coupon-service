@@ -3,7 +3,7 @@ package com.northwind.coupon.redemption;
 import com.northwind.coupon.analytics.RedemptionAnalyticsClient;
 import com.northwind.coupon.audit.RedemptionAuditor;
 import com.northwind.coupon.fraud.DeviceFingerprint;
-import com.northwind.coupon.fraud.InMemoryVelocityCounterStore;
+import com.northwind.coupon.fraud.VelocityCounterStore;
 import com.northwind.coupon.fraud.VelocityGuard;
 import jakarta.validation.Valid;
 import org.slf4j.Logger;
@@ -65,15 +65,17 @@ public class RedemptionController {
     }
 
     /**
-     * The velocity counter store is full and cannot evict its way under its ceiling.
+     * The velocity counter store cannot answer — unreachable, or at its ceiling.
      *
-     * <p>Fails closed: we refuse the redemption rather than let it through unchecked. A 503 is
-     * the honest signal — this is our capacity problem, not the customer's request being bad.
+     * <p>Fails closed: we refuse the redemption rather than let it through unchecked. A velocity
+     * check that silently passes because its store is down is worse than no check, because
+     * nothing says so. A 503 is the honest signal — this is our availability problem, not the
+     * customer's request being bad.
      */
-    @ExceptionHandler(InMemoryVelocityCounterStore.CounterStoreExhaustedException.class)
+    @ExceptionHandler(VelocityCounterStore.CounterStoreUnavailableException.class)
     @ResponseStatus(HttpStatus.SERVICE_UNAVAILABLE)
-    public String counterStoreExhausted(
-            InMemoryVelocityCounterStore.CounterStoreExhaustedException e) {
+    public String counterStoreUnavailable(
+            VelocityCounterStore.CounterStoreUnavailableException e) {
         return e.getMessage();
     }
 

@@ -17,6 +17,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>COUPON-491 held these counters in two plain {@code ConcurrentHashMap}s with no eviction —
  * an {@code OutOfMemoryError} on a Tier-1 path (ECS-2.2) and an infinite retention period for
  * pseudonymised personal data (DPP-5.1).
+ *
+ * <p>This implementation is now local-development only; {@link RedisVelocityCounterStore} is the
+ * production store. It is still tested, because a local store that behaves differently from the
+ * shared one is a source of bugs that only appear in production.
  */
 class InMemoryVelocityCounterStoreTest {
 
@@ -157,8 +161,8 @@ class InMemoryVelocityCounterStoreTest {
         store.increment("a");
         store.increment("b");
 
-        InMemoryVelocityCounterStore.CounterStoreExhaustedException e = assertThrows(
-                InMemoryVelocityCounterStore.CounterStoreExhaustedException.class,
+        VelocityCounterStore.CounterStoreUnavailableException e = assertThrows(
+                VelocityCounterStore.CounterStoreUnavailableException.class,
                 () -> store.increment("c"));
 
         assertTrue(e.getMessage().contains("refused rather than"),
@@ -166,6 +170,36 @@ class InMemoryVelocityCounterStoreTest {
         assertEquals(2, store.size(),
                 "the refused key is rolled back, so it neither overstates the store nor"
                         + " leaves a count a retry did not earn");
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // peek — used across a key rotation (DPP-11.6).
+    // ---------------------------------------------------------------------------------------
+
+    @Test
+    void peekReadsTheCountWithoutRecordingAnAttempt() {
+        InMemoryVelocityCounterStore store = store(Duration.ofHours(24), 1000);
+
+        store.increment("a");
+        store.increment("a");
+
+        assertEquals(2, store.peek("a"));
+        assertEquals(2, store.peek("a"), "peeking twice must not change the count");
+    }
+
+    @Test
+    void peekTreatsAnUnknownKeyAsZero() {
+        assertEquals(0, store(Duration.ofHours(24), 1000).peek("never-seen"));
+    }
+
+    @Test
+    void peekTreatsAnExpiredKeyAsZero() {
+        InMemoryVelocityCounterStore store = store(Duration.ofHours(24), 1000);
+
+        store.increment("a");
+        clock.advance(Duration.ofHours(25));
+
+        assertEquals(0, store.peek("a"));
     }
 
     @Test

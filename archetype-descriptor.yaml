@@ -21,11 +21,18 @@ environmentVariables:
   # Keys the velocity fingerprints. Injected from the platform secret store — the digest is
   # only irreversible in practice because this value never leaves the process.
   FRAUD_VELOCITY_HASH_KEY: secret://coupon-service/fraud-velocity-hash-key
+  # Set only during a key rotation overlap, then removed. See DPP-11.
+  FRAUD_VELOCITY_PREVIOUS_HASH_KEY: secret://coupon-service/fraud-velocity-previous-hash-key
+  REDIS_URL: redis://velocity-counters.prod.internal:6379
 
 # Upstream services. billing-service is hard: a redemption we cannot reconcile against a
 # charge is a discount we cannot account for, so we hold instead of applying it.
 dependencies:
   - service: billing-service
+  # Velocity counters (ECS-2.2). Hard on the redemption entrypoint: the guard fails closed, so
+  # an unreachable cluster refuses redemptions rather than letting them through unchecked.
+  - service: redis-velocity-counters
+    criticality: hard
 
 # Downstream consumers of our published redemption contract (docs/api/redemption.md).
 # Kept here because the platform uses it for change notification: anything that changes the
@@ -56,9 +63,9 @@ alarms:
   # COUPON-496. The counter store fails closed at its ceiling, which refuses redemptions — so
   # the ceiling being approached has to be visible well before it is reached.
   - name: VelocityCounterStoreUtilisation
-    metric: custom:coupon.velocity.tracked.keys
+    metric: redis:velocity-counters.keyspace.used.percent
     comparison: GreaterThanThreshold
-    threshold: 200000
+    threshold: 80
     periods: 2
     priority: P2
   - name: VelocityRefusalRate

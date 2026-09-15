@@ -3,6 +3,7 @@ package com.northwind.coupon.fraud;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import java.time.Clock;
@@ -42,11 +43,20 @@ import java.util.concurrent.ConcurrentHashMap;
  * silently disables the fraud check for that attacker, whereas refusing is visible, alarmed, and
  * fails closed.
  *
- * <p><strong>Interim.</strong> ECS-2.2 requires this state in the shared Redis cluster. This
- * implementation is bounded and erasable so it is no longer a policy breach on retention or
- * heap, but the shared-store requirement is tracked in COUPON-497 and is not satisfied here.
+ * <h2>Local development only</h2>
+ *
+ * <p><strong>This is not the production store.</strong> ECS-2.2 requires velocity state in the
+ * shared Redis cluster, and {@link RedisVelocityCounterStore} is the default — this one is
+ * selected only by setting {@code fraud.velocity.store: memory} explicitly, which the
+ * production configuration does not do.
+ *
+ * <p>The reason is not only heap. A per-instance counter is an <em>n</em>-times-the-limit bypass
+ * for an attacker spread across instances, and a rolling deploy resets every counter. Those are
+ * correctness gaps in the fraud check, not capacity concerns, and no amount of bounding fixes
+ * them.
  */
 @Component
+@ConditionalOnProperty(name = "fraud.velocity.store", havingValue = "memory")
 public class InMemoryVelocityCounterStore implements VelocityCounterStore {
 
     private static final Logger log =
@@ -68,6 +78,14 @@ public class InMemoryVelocityCounterStore implements VelocityCounterStore {
         this.window = window;
         this.maxTrackedKeys = maxTrackedKeys;
         this.clock = clock;
+    }
+
+    @Override
+    public int peek(String key) {
+        Counter counter = counters.get(key);
+        return counter == null || counter.hasExpired(Instant.now(clock), window)
+                ? 0
+                : counter.count();
     }
 
     @Override
@@ -96,7 +114,7 @@ public class InMemoryVelocityCounterStore implements VelocityCounterStore {
 
             log.error("velocity counter store is at its ceiling keys={} max={} — refusing",
                     counters.size(), maxTrackedKeys);
-            throw new CounterStoreExhaustedException(
+            throw new CounterStoreUnavailableException(
                     "velocity counter store holds " + counters.size() + " keys, ceiling is "
                             + maxTrackedKeys + " — redemptions are refused rather than"
                             + " left unchecked");
@@ -153,13 +171,6 @@ public class InMemoryVelocityCounterStore implements VelocityCounterStore {
 
         boolean hasExpired(Instant now, Duration window) {
             return firstSeen.plus(window).isBefore(now);
-        }
-    }
-
-    /** The store is full and cannot evict its way under the ceiling. */
-    public static class CounterStoreExhaustedException extends RuntimeException {
-        public CounterStoreExhaustedException(String message) {
-            super(message);
         }
     }
 }

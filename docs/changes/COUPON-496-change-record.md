@@ -30,7 +30,9 @@ are quoted so each requirement can be checked against what is provided.
 | Finding from the PCDEM-53 assessment | Fix |
 | --- | --- |
 | `VelocityGuard:50-54` — full PAN, IP and email logged at `INFO` on **every** attempt (DPP-3.1, DPP-7.1, PCI-DSS v4.0 Req 3.3/3.4) | Nothing personal is logged at any level. Every check logs a 12-character `deviceRef` derived from a keyed HMAC — enough to correlate two attempts in one investigation, not enough to identify anyone. |
-| `VelocityGuard:36-43` — unbounded `ConcurrentHashMap`s, no eviction or TTL (ECS-2.2, DPP-5.1) | Replaced by `VelocityCounterStore`. The in-memory implementation is bounded by **time** (`windowMinutes`, default 1440) **and size** (`maxTrackedKeys`, default 250,000), with lazy and on-pressure sweeps. |
+| `VelocityGuard:36-43` — unbounded `ConcurrentHashMap`s, no eviction or TTL (ECS-2.2, DPP-5.1) | Counters move to the **shared Redis cluster** — `RedisVelocityCounterStore`, which is what ECS-2.2 requires. Fixed-window `INCR` with the TTL set on the creating write, so Redis enforces the retention period itself. The in-memory store is retained for local development only and is selected only by `fraud.velocity.store: memory`. |
+| Rotating the HMAC key reset every counter — a **fraud bypass on a schedule** (DPP-11.6) | Rotation is overlapped: `previousHashKey` is set for one counter window, both digests are computed, and the guard takes the higher count. An attacker at their limit carries it across a rotation. Erasure covers both digests. |
+| No key validation (DPP-11.3, DPP-11.5) | Minimum 32 bytes, enforced **at startup**. A missing or short key refuses to start rather than degrading to keying on raw values. |
 | `RedemptionAnalyticsClient:39-47` — string-concatenated JSON over unvalidated input | Built through Jackson. Covered by escaping tests for `"` and `\`. |
 | `DeviceFingerprint:33-38` — full PAN used as a map key (DPP-7.1) | Every component is a **keyed HMAC-SHA256**. The reason the raw PAN was used — the last four collides at our volume and a collision refuses a real customer — is satisfied by hashing rather than truncating: as unique as the PAN, and not the PAN. Key comes from the platform secret store. |
 
@@ -44,7 +46,7 @@ are quoted so each requirement can be checked against what is provided.
 
 | Finding | Fix |
 | --- | --- |
-| Unbounded memory growth → `OutOfMemoryError` at 593,000 redemptions/month (ECS-2.2, BCT-2) | Bounded store, above. At the ceiling it **fails closed**: refuses rather than evicting a live counter, because evicting silently switches the fraud check off for whoever it belonged to. Surfaces as `503`, alarmed by `VelocityCounterStoreUtilisation` at 80% of the ceiling. |
+| Unbounded memory growth → `OutOfMemoryError` at 593,000 redemptions/month (ECS-2.2, BCT-2) | Counters are no longer in process memory at all. Both stores **fail closed** — an unreachable cluster or an exhausted local store refuses the redemption rather than letting it through unchecked, surfacing as `503`. Alarmed by `VelocityCounterStoreUtilisation` on the cluster's own keyspace metrics at 80%. |
 | Analytics HTTP call has no request timeout → thread starvation (ECS-4.4) | Both timeouts set (`connectTimeoutMillis`, `requestTimeoutMillis`, 500ms each). `publish` is also now **non-fatal** — it ran after the charge had settled, so a failure used to fail a checkout for an order already charged. |
 
 ### Operational
@@ -98,6 +100,11 @@ fixed by merging it would be misleading** — they are not.
 | `RedemptionAnalyticsClientTest.carriesNoPersonalData` / `carriesNoCardholderData` | C1/C2 only | third-party C3 transfer |
 | `RedemptionAnalyticsClientTest.escapesAValueThatWouldHaveBrokenTheJson` | Jackson, not concatenation | JSON injection |
 | `RedemptionAnalyticsClientTest.reportsFailureRatherThanThrowing…` | non-fatal, bounded | checkout failure after a settled charge |
+| `RedisVelocityCounterStoreTest.setsTheTtlOnTheWriteThatCreatesTheKey` | fixed window, not sliding | a steady attacker never expiring |
+| `RedisVelocityCounterStoreTest.refusesTheRedemptionWhenTheClusterIsUnreachable` | **fails closed** | a fraud check silently passing when its store is down |
+| `RedisVelocityCounterStoreTest.peekReadsTheCountWithoutRecordingAnAttempt` | rotation read is side-effect free | double-counting across a rotation |
+| `DeviceFingerprintTest.refusesToStartWithoutAKey` / `refusesAKeyShorterThanTheMinimum` | DPP-11.3, DPP-11.5 | silent fallback to raw values |
+| `DeviceFingerprintTest.duringARotationBothDigestsAreReturnedAndTheyDiffer` | DPP-11.6 overlap | rotation as a fraud bypass |
 | **`RedemptionRequestCompatibilityTest.aRequestFromAConsumerPinnedTo240IsValid`** | **a 2.4.0-shaped request passes validation** | **the `order-service` 400** |
 | `VelocityGuardTest.acceptsARequestFromAConsumerThatSendsNoDeviceOrOrigin` | accepted, not rejected | same |
 | `VelocityGuardTest.holdsAnUnattributedAttemptToAStricterLimit` | absence tightens, not disables | the reason optional is safe |
@@ -110,6 +117,8 @@ fixed by merging it would be misleading** — they are not.
 | Upstream `order-service` | confirm `pom.xml` still pins `coupon.contract.version 2.4.0` | pinned and correct — 3.2.0 is wire-compatible |
 | Downstream `billing-service` | charge still succeeds; no change to the charge request shape | unchanged by this PR |
 | Log estate | grep the release candidate's output for a 16-digit sequence and for `customerIp=` | no matches at any log level |
+| Redis | confirm `coupon:velocity:*` keys appear with a TTL, and that counters are shared across two instances | keys present with TTL ≈ 1440 min; a second instance sees the first's count |
+| Redis | stop the cluster and attempt a redemption | **503**, not a successful unchecked redemption |
 | Analytics | capture one outbound payload | no `customerIp`, `deviceId`, `customerEmail` or `cardLastFour` keys |
 
 ---
@@ -146,15 +155,21 @@ peak 17:00–22:00 CET, weekend peak Fri 16:00 – Mon 06:00 CET, quarter-end cl
 embargo. **No freeze exception required**, so no ECS-5.3 breach — unlike COUPON-491, which the
 assessment found was deployed outside an approved window with no CAB record.
 
-**Pre-deployment:** `FRAUD_VELOCITY_HASH_KEY` must exist in the secret store for the target
-environment. The service will not start without it, deliberately — a missing key must not
-degrade to keying on raw values.
+**Pre-deployment, both mandatory:**
+
+1. `FRAUD_VELOCITY_HASH_KEY` exists in the target secret store and is at least 32 bytes. The
+   service will not start otherwise, deliberately — a missing or weak key must not degrade to
+   keying on raw values (DPP-11.3, DPP-11.5).
+2. `REDIS_URL` points at a reachable `redis-velocity-counters` cluster. The guard fails closed,
+   so an unreachable cluster refuses redemptions — this is a **new hard dependency on the
+   checkout path** and must be confirmed before the first canary step, not during it.
 
 **Rollout:** 5% → 30-min soak → 25% → 30-min soak → 100%. ~70 minutes.
 
 **Abort on:** `VelocityCounterStoreUtilisation` firing · `VelocityRefusalRate` outside its
 normal band in either direction · any 16-digit sequence appearing in log output ·
-`order-service` 4xx rate on `POST /v1/redemptions` above zero.
+`order-service` 4xx rate on `POST /v1/redemptions` above zero · any `503` from the redemption
+endpoint, which means the counter store is not answering.
 
 **On-call (ECS-5.4):** `coupon-service` on-call and SME on shift for the window.
 `order-service` on-call on notice, since their 400s are what this fixes.
@@ -172,31 +187,46 @@ Each must be recorded on the ticket before it leaves Review (ECS-10.1). No self-
 | **DPO** | changes what personal data is logged, transmitted and retained — in the reducing direction, but it is still a change of processing | DPP-8, DPP-8.1 |
 | **Security / CISO** | changes a masking and hashing mechanism | DPP-3.3, DPP-7.3, ECS-2.3 |
 | **Financial Crime** | changes fraud and velocity control behaviour, including the new unattributed limit | DPP-8, ECS-2.5 |
-| **Architecture Review Board** | published contract version bump | ECS-10, ECS-3.6 |
+| **Architecture Review Board** | published contract version bump, **and** a new hard runtime dependency on the checkout path (`redis-velocity-counters`) | ECS-10, ECS-3.6, DPP-9.5 |
 | **CAB** | Tier-1 payments path | ECS-10, BCT-1.1 |
 
 **Not required:** Finance Controller. No monetary field, rounding, scale or basis changes here.
 
 ---
 
-## 8. Residual risk, stated plainly
+## 8. Cryptography compliance (DPP-11)
 
-**ECS-2.2 requires rate-limiting state in the shared Redis cluster, not process memory.** This
-change bounds and makes erasable the in-memory store, which removes the DPP-5.1 retention breach
-and the heap exhaustion risk — but it does **not** satisfy the shared-store requirement. The
-`VelocityCounterStore` interface exists so a Redis implementation drops in without touching
-`VelocityGuard`.
+The pseudonymisation this change introduces is mapped to the standard rather than left as a
+judgement call:
 
-Consequences while this stands, both worth a reviewer's attention:
+| Rule | Requirement | This change |
+| --- | --- | --- |
+| DPP-11.1 | HMAC-SHA256 with a secret key, Base64url output | ✅ `DeviceFingerprint` |
+| DPP-11.2 | Keyed, because a bare digest of a 16-digit PAN is reversible by exhaustive search | ✅ keyed HMAC, asserted by `aDifferentKeyProducesADifferentDigestForTheSameInput` |
+| DPP-11.3 | Minimum 32-byte key, rejected at startup | ✅ `MINIMUM_KEY_BYTES`, asserted by `refusesAKeyShorterThanTheMinimum` |
+| DPP-11.4 | Key from the platform secret store, never logged, never leaves the process | ✅ `secret://coupon-service/fraud-velocity-hash-key`; the key is a private field and appears in no log statement |
+| DPP-11.5 | Fail closed on a missing key — no fallback to the raw value | ✅ asserted by `refusesToStartWithoutAKey` |
+| DPP-11.6 | Rotation overlapped by one state window; the control takes the more conservative value; erasure covers both digests | ✅ `previousHashKey`, `Keys.hasPrevious()`, `VelocityGuard.countFor` takes the max; `forget` covers both |
+| DPP-11.7 | Pseudonymised data is still personal data, subject to DPP-5 in full | ✅ TTL retention and per-subject erasure both implemented |
+| DPP-11.8 | A digest prefix may be logged, ≤ 16 characters | ✅ 12 characters, asserted by `theLogSafeReferenceIsShortAndNotTheDeviceId` |
 
-- Counters are **per instance**, so an attacker spread across instances gets up to *n* times the
-  limit. With `minInstances: 2` and `maxInstances: 12` that is a real gap, not a theoretical one.
-- A rolling deploy resets every live counter.
+**No construction outside DPP-11.1 is introduced.** The Security sign-off in §7 is still
+required (DPP-11.9); what is not required is treating this as an unassessed cryptographic risk.
 
-Tracked as **COUPON-497**. This needs either that ticket committed to a sprint or an approved
-ECS-10 exception recorded on this change — it should not pass review unstated.
+### ECS-2.2 — now satisfied
 
----
+The earlier draft of this change kept counters in process memory and disclosed the gap. That is
+closed: `RedisVelocityCounterStore` is the default and the only production store, so counters
+are shared across instances. The two consequences that made the in-memory version unacceptable
+are both gone — an attacker spread across 2–12 instances no longer gets *n* times the limit, and
+a rolling deploy no longer resets every counter.
+
+**COUPON-497 is closed by this change** rather than deferred.
+
+New dependency: `redis-velocity-counters`, declared hard in `archetype-descriptor.yaml`. The
+guard fails closed, so an unreachable cluster refuses redemptions — that is the correct direction
+for a fraud control and it is a new availability dependency on the checkout path, which the
+Architecture Review Board should see explicitly.
 
 ## 9. Business case (BCT-3, BCT-9)
 

@@ -32,9 +32,11 @@ import org.springframework.stereotype.Component;
  *       a card-keyed counter could never see.</li>
  * </ul>
  *
- * <p>Both are held in a {@link VelocityCounterStore}, which is bounded and erasable. Keys come
- * from {@link DeviceFingerprint} and are keyed hashes — no raw PAN, IP or device identifier is
- * retained or logged (COUPON-496).
+ * <p>Both are held in a {@link VelocityCounterStore} — the shared Redis cluster in production
+ * (ECS-2.2), bounded and erasable. Keys come from {@link DeviceFingerprint} and are keyed
+ * hashes: no raw PAN, IP or device identifier is retained or logged (COUPON-496). During a hash
+ * key rotation the higher of the two counts is taken, so a rotation is not a way to reset a
+ * counter.
  *
  * <h2>When the device and origin are absent</h2>
  *
@@ -76,8 +78,8 @@ public class VelocityGuard {
     public void check(RedemptionRequest request) {
         boolean attributed = isAttributable(request);
 
-        String key = fingerprints.keyFor(request);
-        int count = counters.increment(key);
+        DeviceFingerprint.Keys keys = fingerprints.keysFor(request);
+        int count = countFor(keys.attempt(), keys.previousAttempt());
 
         // A reference an operator can correlate on, derived from the device digest. Not the
         // device identifier, and not reversible to it.
@@ -100,7 +102,7 @@ public class VelocityGuard {
             return;
         }
 
-        int deviceCount = counters.increment(fingerprints.deviceKeyFor(request));
+        int deviceCount = countFor(keys.device(), keys.previousDevice());
 
         // No PAN, no IP, no email, no device identifier — at any level. DPP-3.1 admits no
         // "debug only" exemption, and log aggregation is replicated out of region and retained
@@ -132,13 +134,37 @@ public class VelocityGuard {
      * hash, so erasure works by recomputing the subject's fingerprint and forgetting it.
      */
     public void forget(RedemptionRequest request) {
-        counters.forget(fingerprints.keyFor(request));
-        counters.forget(fingerprints.deviceKeyFor(request));
+        DeviceFingerprint.Keys keys = fingerprints.keysFor(request);
+
+        counters.forget(keys.attempt());
+        counters.forget(keys.device());
+
+        // An erasure has to cover the rotation overlap too, or the subject's counters survive
+        // under the previous key until its TTL.
+        if (keys.hasPrevious()) {
+            counters.forget(keys.previousAttempt());
+            counters.forget(keys.previousDevice());
+        }
     }
 
     /** Counter cardinality, for the fraud dashboard and the capacity alarm. */
     public int trackedAttempts() {
         return counters.size();
+    }
+
+    /**
+     * The count for a key, carrying across a hash-key rotation.
+     *
+     * <p>During a rotation overlap the same attempt has two digests. Taking the higher of the
+     * two counts means an attacker at their limit does not get a clean slate when the key
+     * rotates — otherwise rotation would be a fraud bypass on a schedule.
+     */
+    private int countFor(String key, String previousKey) {
+        int count = counters.increment(key);
+
+        return previousKey == null
+                ? count
+                : Math.max(count, counters.peek(previousKey));
     }
 
     /** True when the request carries both a device and an origin. */

@@ -21,6 +21,17 @@ server:
 # redemption cannot complete while billing-service is unreachable — we hold rather than
 # apply a discount we cannot reconcile.
 # --------------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------------
+# Shared Redis cluster — velocity counters (ECS-2.2)
+#
+# Failure here fails redemption closed. That is deliberate: a velocity check that passes
+# because its store is unavailable is worse than no check, because nothing says so.
+# --------------------------------------------------------------------------------------
+spring.data.redis:
+  url: ${REDIS_URL}
+  timeout: 200ms
+  connect-timeout: 200ms
+
 clients:
   billing:
     baseUrl: ${BILLING_SERVICE_BASE_URL}
@@ -64,20 +75,29 @@ analytics:
 # --------------------------------------------------------------------------------------
 fraud:
   velocity:
+    # Where counters live. `redis` is the default and the only production value — ECS-2.2
+    # requires rate-limiting state in the shared cluster. `memory` exists for local development
+    # and is a per-instance counter, which is an n-times-the-limit bypass in production.
+    store: redis
     maxPerCoupon: 3
     maxPerDevice: 40
     # An attempt carrying no device or origin cannot be checked against the catalogue-sweep
     # pattern, so it is held to a tighter limit rather than waved through. Omitting the fields
     # tightens the check; there is nothing to gain by leaving them out.
     maxUnattributed: 2
-    # Counter keys are keyed HMACs of the device, origin and card. The secret comes from the
-    # platform secret store — never commit it, and rotating it resets every live counter.
+    # Counter keys are keyed HMAC-SHA256 digests of the device, origin and card (DPP-11). The
+    # secret comes from the platform secret store; the service refuses to start without it
+    # rather than degrading to keying on raw values. Minimum 32 bytes, enforced at startup.
     hashKey: ${FRAUD_VELOCITY_HASH_KEY}
+    # Set for one counter window during a key rotation, then removed. While it is set the guard
+    # takes the higher of the counts under both keys, so a rotation is not a way for an attacker
+    # at their limit to get a clean slate. See DPP-11.
+    previousHashKey: ${FRAUD_VELOCITY_PREVIOUS_HASH_KEY:}
     # Retention. Counters expire after this window, which is both the fraud lookback and the
     # retention period for the pseudonymised keys (DPP-5.1).
     windowMinutes: 1440
-    # Hard ceiling on tracked keys (ECS-2.2). At the ceiling we refuse rather than evict a live
-    # counter — refusing is visible and fails closed; evicting silently disables the check.
+    # Hard ceiling, for the local-development in-memory store only. Redis expires keys on their
+    # own TTL and the cluster is sized independently, so there is nothing to bound in-process.
     maxTrackedKeys: 250000
 
 logging:
