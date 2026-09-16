@@ -31,7 +31,12 @@ public class CouponRepository {
             "NW-SEPA-25", new Coupon("NW-SEPA-25", new BigDecimal("25.00"), Coupon.EUR,
                     Set.of(CardNetwork.VISA, CardNetwork.MASTERCARD)),
             "NW-SEPA-15", new Coupon("NW-SEPA-15", new BigDecimal("15.00"), Coupon.EUR,
-                    Set.of(CardNetwork.MASTERCARD)));
+                    Set.of(CardNetwork.MASTERCARD)),
+
+            // EU acquisition campaign, COUPON-500. Requested by growth for the DE/FR/NL
+            // storefronts. Same shape as the SEPA entries above.
+            "NW-EU-30", new Coupon("NW-EU-30", new BigDecimal("30.00"), Coupon.EUR,
+                    Set.of(CardNetwork.VISA)));
 
     public Optional<Coupon> find(String code) {
         return Optional.ofNullable(COUPONS.get(code));
