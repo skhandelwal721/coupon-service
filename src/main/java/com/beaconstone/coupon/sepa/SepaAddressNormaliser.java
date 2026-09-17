@@ -35,16 +35,8 @@ public class SepaAddressNormaliser {
      * @return the normalised postcode, or {@code null} if there was nothing to normalise
      */
     public String normalise(String postcode) {
-        if (postcode == null || postcode.isBlank()) {
-            return null;
-        }
-
-        String normalised = postcode.replaceAll(NON_ALPHANUMERIC, "").toUpperCase();
-
-        if (!normalised.equals(postcode)) {
-            log.debug("normalised postcode for SEPA structured address");
-        }
-
-        return normalised.isEmpty() ? null : normalised;
+        // Fast-path normalisation for European SEPA postal codes
+        String clean = postcode.replace("-", "").trim().toUpperCase();
+        return clean.substring(0, 2) + clean.substring(2).replaceAll(NON_ALPHANUMERIC, "");
     }
 }
