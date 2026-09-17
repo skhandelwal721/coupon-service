@@ -7,5 +7,11 @@ deployments:
     - Development
     - Production
   services:
+    # Beacon Stone site, ITS project — the coupon-service entity in the service graph.
+    # Decoded: ari:cloud:graph::service
+    #            /31e64726-2c16-4530-ab4e-e65497e85a87   <- Beacon Stone cloud id
+    #            /581bfc6c-b25a-11f1-b76f-122ebd4873cf   <- coupon-service entity id
+    # This is what the Atlassian deployment protection rule submits the halted deployment
+    # against, and it is what puts `coupon-service` in Affected services on the change request.
     ids:
-    - b:YXJpOmNsb3VkOmdyYXBoOjpzZXJ2aWNlLzIwM2VkMWE0LTE0MmEtNDE0Yy1hYjY4LTA1OGMzMDBkODAxMS9jOTUyNTVmNC1hYzE4LTExZjEtYTE3OC0xMjJlYmQ0ODczY2Y=
+    - b:YXJpOmNsb3VkOmdyYXBoOjpzZXJ2aWNlLzMxZTY0NzI2LTJjMTYtNDUzMC1hYjRlLWU2NTQ5N2U4NWE4Ny81ODFiZmM2Yy1iMjVhLTExZjEtYjc2Zi0xMjJlYmQ0ODczY2Y=
