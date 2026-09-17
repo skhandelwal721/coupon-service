@@ -49,6 +49,17 @@ settlement:
     amountRepresentation: MINOR_UNITS
     structuredAddress: true
 
+# --------------------------------------------------------------------------------------
+# Multi-currency promotions — COUPON-510
+#
+# A code picked up on one storefront can be redeemed on another. Conversion happens at
+# redemption so the checkout path never waits on a rate lookup.
+# --------------------------------------------------------------------------------------
+promotions:
+  multiCurrency:
+    enabled: true
+    corridors: GBP:EUR,EUR:GBP
+
 analytics:
   redemptionEndpoint: https://analytics.beaconstone.example/v1/events/redemption
 

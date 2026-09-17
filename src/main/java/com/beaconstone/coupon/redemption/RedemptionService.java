@@ -7,6 +7,7 @@ import com.beaconstone.coupon.billing.CardNetwork;
 import com.beaconstone.coupon.ledger.PromotionLedger;
 import com.beaconstone.coupon.promotion.Coupon;
 import com.beaconstone.coupon.promotion.CouponRepository;
+import com.beaconstone.coupon.promotion.FxRates;
 import com.beaconstone.coupon.promotion.NetworkPromotionRules;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -45,17 +46,20 @@ public class RedemptionService {
     private final NetworkPromotionRules promotionRules;
     private final RedemptionAuditor auditor;
     private final PromotionLedger promotionLedger;
+    private final FxRates fxRates;
 
     public RedemptionService(BillingClient billingClient,
                              CouponRepository couponRepository,
                              NetworkPromotionRules promotionRules,
                              RedemptionAuditor auditor,
-                             PromotionLedger promotionLedger) {
+                             PromotionLedger promotionLedger,
+                             FxRates fxRates) {
         this.billingClient = billingClient;
         this.couponRepository = couponRepository;
         this.promotionRules = promotionRules;
         this.auditor = auditor;
         this.promotionLedger = promotionLedger;
+        this.fxRates = fxRates;
     }
 
     public RedemptionReceipt redeem(RedemptionRequest request) {
@@ -78,13 +82,19 @@ public class RedemptionService {
         CardNetwork network = promotionRules.fundingNetwork(charge);
         String redemptionId = "rdm_" + UUID.randomUUID();
 
-        // Minor units, so one settlement pipeline covers Bacs/FPS and SEPA. See Coupon.
-        java.math.BigDecimal discountMinorUnits = coupon.discountMinorUnits();
+        // COUPON-510: convert the promotion into the currency the shopper is checking out in,
+        // so a code picked up on one storefront can be redeemed on another.
+        java.math.BigDecimal discountInOrderCurrency = fxRates.convert(
+                coupon.discount(), coupon.settlementCurrency(), request.currency());
 
-        log.info("redeemed redemptionId={} couponCode={} chargeId={} network={} currency={} "
-                        + "discountMinorUnits={} sepaSettled={}",
+        java.math.BigDecimal discountMinorUnits = discountInOrderCurrency
+                .multiply(new java.math.BigDecimal("100"))
+                .setScale(0, java.math.RoundingMode.DOWN);
+
+        log.info("redeemed redemptionId={} couponCode={} chargeId={} network={} "
+                        + "couponCurrency={} orderCurrency={} discountMinorUnits={}",
                 redemptionId, coupon.code(), charge.chargeId(), network,
-                coupon.settlementCurrency(), discountMinorUnits, coupon.isSepaSettled());
+                coupon.settlementCurrency(), request.currency(), discountMinorUnits);
 
         RedemptionReceipt receipt = new RedemptionReceipt(
                 redemptionId,
