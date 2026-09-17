@@ -18,9 +18,17 @@ import jakarta.validation.constraints.Pattern;
  */
 public record RedemptionRequest(
 
+        /**
+         * The coupon code, in catalogue form.
+         *
+         * <p>{@code BS-} is the Beacon Stone prefix, new for COUPON-550. {@code NW-} is the
+         * Northwind-era prefix every code in the catalogue carried before the rebrand, and it
+         * stays accepted: those codes are printed on cards and in live campaigns, so narrowing
+         * the pattern to the new prefix would refuse promotions customers already hold.
+         */
         @NotBlank(message = "couponCode is required")
-        @Pattern(regexp = "^NW-[A-Z]{2,4}-\\d{2}$",
-                message = "couponCode must look like NW-XXXX-00")
+        @Pattern(regexp = "^(BS|NW)-[A-Z]{2,4}-\\d{2}$",
+                message = "couponCode must look like BS-XXXX-00")
         String couponCode,
 
         @NotBlank(message = "invoiceId is required")
