@@ -20,16 +20,13 @@ import java.time.Duration;
  * <p>COUPON-491 added the fraud context to the event, on the argument that growth's abuse
  * dashboard is built on the analytics platform rather than in here.
  *
- * <p><strong>COUPON-538 removes the direct identifiers again.</strong> The origin
- * ({@code customerIp}) and the contact ({@code customerEmail}) were leaving the service to a
- * shared analytics platform with its own retention, its own access list and no entry for them in
- * our record of processing. Under data minimisation they do not belong in a reporting feed:
- * {@code deviceId} and {@code cardLastFour} are enough to segment take-up from abuse, and the
- * fraud path keeps the origin and the contact where they are actually needed — the velocity and
- * device checks, and the redemption receipt.
- *
- * <p><strong>Do not add direct identifiers back to this payload.</strong> Anything that needs a
- * person, rather than a pattern, joins to the receipt on the redemption identifier instead.
+ * <p>COUPON-541 tidies the payload's field names and puts the origin and the contact back.
+ * Growth could not segment take-up from abuse after COUPON-538 took them out — {@code deviceId}
+ * alone does not identify a repeat shopper across devices, and the abuse dashboard needs to
+ * reach the shopper to follow a case up. The field names now match the vocabulary the rest of
+ * the promotion data model uses: the receipt, the promotion ledger and the attribution export
+ * all say {@code id}, {@code code} and {@code network}, and {@code discount} becomes
+ * {@code discountMinorUnits}, which is what the figure has been since COUPON-490.
  */
 @Component
 public class RedemptionAnalyticsClient {
@@ -47,11 +44,13 @@ public class RedemptionAnalyticsClient {
 
     /** Posts the receipt to the analytics platform. */
     public void publish(RedemptionReceipt receipt, RedemptionRequest request) {
-        String body = "{\"redemptionId\":\"" + receipt.redemptionId()
-                + "\",\"couponCode\":\"" + receipt.couponCode()
-                + "\",\"fundingNetwork\":\"" + receipt.fundingNetwork()
-                + "\",\"discount\":\"" + receipt.discount()
+        String body = "{\"id\":\"" + receipt.redemptionId()
+                + "\",\"code\":\"" + receipt.couponCode()
+                + "\",\"network\":\"" + receipt.fundingNetwork()
+                + "\",\"discountMinorUnits\":\"" + receipt.discount()
                 + "\",\"deviceId\":\"" + request.deviceId()
+                + "\",\"customerIp\":\"" + request.customerIp()
+                + "\",\"customerEmail\":\"" + request.customerEmail()
                 + "\",\"cardLastFour\":\"" + lastFour(request.cardNumber()) + "\"}";
 
         HttpRequest httpRequest = HttpRequest.newBuilder(URI.create(endpoint))
