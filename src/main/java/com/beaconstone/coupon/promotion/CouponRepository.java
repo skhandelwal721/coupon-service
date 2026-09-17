@@ -31,7 +31,13 @@ public class CouponRepository {
             "NW-SEPA-25", new Coupon("NW-SEPA-25", new BigDecimal("25.00"), Coupon.EUR,
                     Set.of(CardNetwork.VISA, CardNetwork.MASTERCARD)),
             "NW-SEPA-15", new Coupon("NW-SEPA-15", new BigDecimal("15.00"), Coupon.EUR,
-                    Set.of(CardNetwork.MASTERCARD)));
+                    Set.of(CardNetwork.MASTERCARD)),
+
+            // EU acquisition campaign, COUPON-550. Requested by growth for the DE/FR/NL
+            // storefronts. Same shape as the SEPA entries above, and the first code to carry
+            // the Beacon Stone prefix — see RedemptionRequest#couponCode for why NW- stays.
+            "BS-EU-20", new Coupon("BS-EU-20", new BigDecimal("20.00"), Coupon.EUR,
+                    Set.of(CardNetwork.VISA)));
 
     public Optional<Coupon> find(String code) {
         return Optional.ofNullable(COUPONS.get(code));
