@@ -1,13 +1,13 @@
 # coupon-service
 
-Promotional coupons and redemption reconciliation for Northwind Retail. Tier 1 — this sits on
+Promotional coupons and redemption reconciliation for Beacon Stone Retail. Tier 1 — this sits on
 the storefront checkout path, and every redemption it books is money off a real invoice.
 
 ## Responsibilities
 
 - `POST /v1/redemptions` — redeems a coupon against an invoice, charging it through
   `billing-service` and booking the discount.
-- Subscribes to `northwind.billing.charge.completed` to attribute promotional spend to the
+- Subscribes to `beaconstone.billing.charge.completed` to attribute promotional spend to the
   network that funded it.
 - Matches inbound chargebacks back to the redemption they reverse.
 
@@ -22,10 +22,10 @@ where each dependency lives in this codebase:
 
 | We read | From | We use it for | Breaks if |
 | --- | --- | --- | --- |
-| `cardType` | charge response and `charge.completed` | resolving the **funding network** for a promotion — [`CardNetwork.fromChargeResponse`](src/main/java/com/northwind/coupon/billing/CardNetwork.java), [`NetworkPromotionRules`](src/main/java/com/northwind/coupon/promotion/NetworkPromotionRules.java) | `cardType` stops carrying a card network |
-| `acquirerReference` | charge response | deriving the acquirer from the `wp_` prefix to attribute a chargeback — [`ChargebackMatcher`](src/main/java/com/northwind/coupon/chargeback/ChargebackMatcher.java) | a reference appears with a prefix we do not know |
-| `subtotal`, `tax`, `total` | charge response | checking `subtotal + tax == total` before booking a discount — [`RedemptionAuditor`](src/main/java/com/northwind/coupon/audit/RedemptionAuditor.java) | anything is added to `total` without a matching field |
-| the whole response shape | `billing-service` `docs/api/openapi.yaml` | our client DTO is generated from it and deserialization is **strict** — [`BillingChargeView`](src/main/java/com/northwind/coupon/billing/BillingChargeView.java) | a field is added to the response |
+| `cardType` | charge response and `charge.completed` | resolving the **funding network** for a promotion — [`CardNetwork.fromChargeResponse`](src/main/java/com/beaconstone/coupon/billing/CardNetwork.java), [`NetworkPromotionRules`](src/main/java/com/beaconstone/coupon/promotion/NetworkPromotionRules.java) | `cardType` stops carrying a card network |
+| `acquirerReference` | charge response | deriving the acquirer from the `wp_` prefix to attribute a chargeback — [`ChargebackMatcher`](src/main/java/com/beaconstone/coupon/chargeback/ChargebackMatcher.java) | a reference appears with a prefix we do not know |
+| `subtotal`, `tax`, `total` | charge response | checking `subtotal + tax == total` before booking a discount — [`RedemptionAuditor`](src/main/java/com/beaconstone/coupon/audit/RedemptionAuditor.java) | anything is added to `total` without a matching field |
+| the whole response shape | `billing-service` `docs/api/openapi.yaml` | our client DTO is generated from it and deserialization is **strict** — [`BillingChargeView`](src/main/java/com/beaconstone/coupon/billing/BillingChargeView.java) | a field is added to the response |
 
 See [`docs/dependencies.md`](docs/dependencies.md) for what each of those failures actually
 does to money, and [`docs/runbooks/redemption.md`](docs/runbooks/redemption.md) for the
@@ -55,7 +55,7 @@ mvn spring-boot:run -Dspring-boot.run.profiles=local
 
 ## Contract version
 
-We generate [`BillingChargeView`](src/main/java/com/northwind/coupon/billing/BillingChargeView.java)
+We generate [`BillingChargeView`](src/main/java/com/beaconstone/coupon/billing/BillingChargeView.java)
 from `billing-service` `docs/api/openapi.yaml` at the version pinned in
 [`pom.xml`](pom.xml) as `billing.contract.version` — currently **4.11.0**. Regenerating is a
 deliberate act with a changelog read, never an automatic bump.

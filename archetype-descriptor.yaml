@@ -1,11 +1,11 @@
 # Platform descriptor for coupon-service.
 name: coupon-service
-description: Promotional coupons and redemption reconciliation for Northwind Retail
-organization: northwind-retail
+description: Promotional coupons and redemption reconciliation for Beacon Stone Retail
+organization: beacon-stone-retail
 owner: growth-platform
 tier: 1
 notifications:
-  email: growth-platform@northwind.example
+  email: growth-platform@beaconstone.example
 
 compute:
   instanceType: c6i.xlarge
@@ -35,7 +35,7 @@ consumers:
     criticality: hard
     reads:
       - charge response — cardType, acquirerReference, subtotal, tax, total
-      - northwind.billing.charge.completed
+      - beaconstone.billing.charge.completed
 
 alarms:
   - name: RedemptionHeldRate

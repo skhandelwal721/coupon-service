@@ -11,11 +11,11 @@
         <relativePath/>
     </parent>
 
-    <groupId>com.northwind</groupId>
+    <groupId>com.beaconstone</groupId>
     <artifactId>coupon-service</artifactId>
     <version>2.4.0-SNAPSHOT</version>
     <name>coupon-service</name>
-    <description>Promotional coupons and redemption reconciliation for Northwind Retail</description>
+    <description>Promotional coupons and redemption reconciliation for Beacon Stone Retail</description>
 
     <properties>
         <java.version>17</java.version>

@@ -32,7 +32,7 @@ clients:
 
 events:
   billing:
-    chargeCompletedTopic: northwind.billing.charge.completed
+    chargeCompletedTopic: beaconstone.billing.charge.completed
 
 # --------------------------------------------------------------------------------------
 # SEPA / EUR settlement — COUPON-490
@@ -50,7 +50,7 @@ settlement:
     structuredAddress: true
 
 analytics:
-  redemptionEndpoint: https://analytics.northwind.example/v1/events/redemption
+  redemptionEndpoint: https://analytics.beaconstone.example/v1/events/redemption
 
 # --------------------------------------------------------------------------------------
 # Fraud velocity — COUPON-491
@@ -65,6 +65,6 @@ fraud:
 
 logging:
   level:
-    com.northwind.coupon: INFO
+    com.beaconstone.coupon: INFO
     # Financial crime asked for the full attempt context while the new counters bed in.
-    com.northwind.coupon.fraud: DEBUG
+    com.beaconstone.coupon.fraud: DEBUG
