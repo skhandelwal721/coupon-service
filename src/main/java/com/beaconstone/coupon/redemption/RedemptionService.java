@@ -62,11 +62,13 @@ public class RedemptionService {
         Coupon coupon = couponRepository.find(request.couponCode())
                 .orElseThrow(() -> new UnknownCouponException(request.couponCode()));
 
-        // billing-service needs the postcode to resolve the VAT place of supply. A cross-border
-        // EUR supply is taxed in the customer's member state, not ours.
+        // COUPON-530: send the promotional deduction with the charge. billing-service applies
+        // it to the invoice subtotal, so a discounted order is one card transaction instead of
+        // a full charge followed by a refund for the difference — one statement line, one
+        // interchange fee.
         BillingChargeView charge = billingClient.charge(
                 request.invoiceId(), request.cardNumber(), request.currency(),
-                request.billingPostcode());
+                request.billingPostcode(), coupon.discountMinorUnits());
 
         auditor.requireAccountable(charge);
 
