@@ -43,6 +43,7 @@ class PromotionLedgerTest {
 
     private static RedemptionReceipt receipt(String fundingNetwork, String discount) {
         return new RedemptionReceipt("rdm_1", "NW-VISA-10", "chg_1",
-                fundingNetwork, new BigDecimal(discount), "REDEEMED");
+                fundingNetwork, new BigDecimal(discount), RedemptionReceipt.MINOR_UNITS,
+                "GBP", null, "REDEEMED");
     }
 }

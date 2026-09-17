@@ -4,6 +4,7 @@ import com.beaconstone.coupon.redemption.RedemptionReceipt;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -15,19 +16,19 @@ class AttributionExportTest {
 
     @Test
     void sumsDiscountsAsAbsoluteAmounts() {
-        AttributionExport.Export result = export.build("2026-09-01", List.of(
+        AttributionExport.Export result = export.build(LocalDate.parse("2026-09-01"), List.of(
                 receipt("rdm_1", "10.00"),
                 receipt("rdm_2", "25.00"),
                 receipt("rdm_3", "15.00")));
 
         assertEquals(3, result.rows().size());
-        assertEquals(new BigDecimal("50.00"), result.total());
+        assertEquals(new BigDecimal("50.00"), result.totalAmount());
         assertTrue(result.exceptions().isEmpty());
     }
 
     @Test
     void holdsAnImplausiblyLargeDiscountAsAnException() {
-        AttributionExport.Export result = export.build("2026-09-01", List.of(
+        AttributionExport.Export result = export.build(LocalDate.parse("2026-09-01"), List.of(
                 receipt("rdm_9", "5000.00")));
 
         assertEquals(0, result.rows().size());
@@ -48,17 +49,18 @@ class AttributionExportTest {
      */
     @Test
     void aTooSmallDiscountProducesNoException() {
-        AttributionExport.Export result = export.build("2026-09-01", List.of(
+        AttributionExport.Export result = export.build(LocalDate.parse("2026-09-01"), List.of(
                 receipt("rdm_1", "10.00")));
 
         assertEquals(1, result.rows().size());
-        assertEquals(new BigDecimal("10.00"), result.total());
+        assertEquals(new BigDecimal("10.00"), result.totalAmount());
         assertTrue(result.exceptions().isEmpty(),
                 "there is no floor on this check, so an understated discount is invisible here");
     }
 
     private static RedemptionReceipt receipt(String id, String discount) {
         return new RedemptionReceipt(id, "NW-VISA-10", "chg_1",
-                "VISA", new BigDecimal(discount), "REDEEMED");
+                "VISA", new BigDecimal(discount), RedemptionReceipt.MINOR_UNITS,
+                "GBP", null, "REDEEMED");
     }
 }

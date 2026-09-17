@@ -44,18 +44,4 @@ public record RedemptionReceipt(
     /** The only representation we issue. Present so the field is never a bare string literal. */
     public static final String MINOR_UNITS = "MINOR_UNITS";
 
-    /**
-     * Back-compatible form, for call sites that predate {@code discountUnit},
-     * {@code settlementCurrency} and {@code customerIp}.
-     *
-     * <p>Retained so both changes stay <strong>additive</strong>: every existing construction
-     * keeps compiling, and only callers that actually care about the representation or the
-     * origin have to supply the new components. Defaults to sterling, which is what every
-     * pre-SEPA call site meant, and to no recorded origin.
-     */
-    public RedemptionReceipt(String redemptionId, String couponCode, String chargeId,
-                             String fundingNetwork, BigDecimal discount, String status) {
-        this(redemptionId, couponCode, chargeId, fundingNetwork, discount,
-                MINOR_UNITS, "GBP", null, status);
-    }
 }

@@ -6,6 +6,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -35,11 +36,10 @@ public class AttributionExport {
 
     private static final Logger log = LoggerFactory.getLogger(AttributionExport.class);
 
-    public Export build(String date, List<RedemptionReceipt> receipts) {
+    public Export build(LocalDate date, List<RedemptionReceipt> receipts) {
         List<ExportRow> rows = new ArrayList<>();
         List<String> exceptions = new ArrayList<>();
-        BigDecimal total = BigDecimal.ZERO.setScale(2);
-        long totalWholeUnits = 0;
+        BigDecimal totalAmount = BigDecimal.ZERO.setScale(2);
 
         for (RedemptionReceipt receipt : receipts) {
             BigDecimal discount = receipt.discount();
@@ -49,17 +49,14 @@ public class AttributionExport {
                 continue;
             }
 
-            rows.add(new ExportRow(receipt.redemptionId(), receipt.couponCode(), discount,
-                    wholeUnits(discount)));
-            total = total.add(discount);
-            totalWholeUnits += wholeUnits(discount);
+            rows.add(new ExportRow(receipt.redemptionId(), receipt.couponCode(), discount));
+            totalAmount = totalAmount.add(discount);
         }
 
-        log.info("built attribution export date={} rows={} total={} totalWholeUnits={} "
-                        + "exceptions={}",
-                date, rows.size(), total, totalWholeUnits, exceptions.size());
+        log.info("built attribution export date={} rows={} total={} exceptions={}",
+                date, rows.size(), totalAmount, exceptions.size());
 
-        return new Export(date, rows, total, totalWholeUnits, exceptions);
+        return new Export(date, rows, totalAmount, exceptions);
     }
 
     /**
@@ -76,22 +73,10 @@ public class AttributionExport {
                 + " is above the plausible ceiling " + MAX_PLAUSIBLE_DISCOUNT;
     }
 
-    /**
-     * The discount as a whole number of currency units, for finance's close spreadsheet.
-     *
-     * <p>Finance asked for a whole-unit column: the close template sums a plain integer column
-     * and does not want to format a decimal per row. The exact figure stays on the row in
-     * {@code discount}, so this is an extra way of reading the same number.
-     */
-    private static long wholeUnits(BigDecimal discount) {
-        return discount.longValue();
+    public record ExportRow(String redemptionId, String couponCode, BigDecimal amount) {
     }
 
-    public record ExportRow(String redemptionId, String couponCode, BigDecimal discount,
-                            long discountWholeUnits) {
-    }
-
-    public record Export(String date, List<ExportRow> rows, BigDecimal total,
-                         long totalWholeUnits, List<String> exceptions) {
+    public record Export(LocalDate date, List<ExportRow> rows, BigDecimal totalAmount,
+                         List<String> exceptions) {
     }
 }
