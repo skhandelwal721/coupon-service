@@ -7,7 +7,6 @@ import com.beaconstone.coupon.billing.CardNetwork;
 import com.beaconstone.coupon.ledger.PromotionLedger;
 import com.beaconstone.coupon.promotion.Coupon;
 import com.beaconstone.coupon.promotion.CouponRepository;
-import com.beaconstone.coupon.promotion.FxRates;
 import com.beaconstone.coupon.promotion.NetworkPromotionRules;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -46,25 +45,26 @@ public class RedemptionService {
     private final NetworkPromotionRules promotionRules;
     private final RedemptionAuditor auditor;
     private final PromotionLedger promotionLedger;
-    private final FxRates fxRates;
 
     public RedemptionService(BillingClient billingClient,
                              CouponRepository couponRepository,
                              NetworkPromotionRules promotionRules,
                              RedemptionAuditor auditor,
-                             PromotionLedger promotionLedger,
-                             FxRates fxRates) {
+                             PromotionLedger promotionLedger) {
         this.billingClient = billingClient;
         this.couponRepository = couponRepository;
         this.promotionRules = promotionRules;
         this.auditor = auditor;
         this.promotionLedger = promotionLedger;
-        this.fxRates = fxRates;
     }
 
     public RedemptionReceipt redeem(RedemptionRequest request) {
         Coupon coupon = couponRepository.find(request.couponCode())
                 .orElseThrow(() -> new UnknownCouponException(request.couponCode()));
+
+        // A promotion is redeemable only in the currency it is denominated in. Refused, not
+        // converted — see requireSameCurrency.
+        requireSameCurrency(coupon, request);
 
         // billing-service needs the postcode to resolve the VAT place of supply. A cross-border
         // EUR supply is taxed in the customer's member state, not ours.
@@ -82,19 +82,14 @@ public class RedemptionService {
         CardNetwork network = promotionRules.fundingNetwork(charge);
         String redemptionId = "rdm_" + UUID.randomUUID();
 
-        // COUPON-510: convert the promotion into the currency the shopper is checking out in,
-        // so a code picked up on one storefront can be redeemed on another.
-        java.math.BigDecimal discountInOrderCurrency = fxRates.convert(
-                coupon.discount(), coupon.settlementCurrency(), request.currency());
+        // One figure, one currency, derived once from the coupon's own amount — never from a
+        // converted intermediate, and never one representation from the other (MFC-4).
+        java.math.BigDecimal discountMinorUnits = coupon.discountMinorUnits();
 
-        java.math.BigDecimal discountMinorUnits = discountInOrderCurrency
-                .multiply(new java.math.BigDecimal("100"))
-                .setScale(0, java.math.RoundingMode.DOWN);
-
-        log.info("redeemed redemptionId={} couponCode={} chargeId={} network={} "
-                        + "couponCurrency={} orderCurrency={} discountMinorUnits={}",
+        log.info("redeemed redemptionId={} couponCode={} chargeId={} network={} currency={} "
+                        + "discountMinorUnits={}",
                 redemptionId, coupon.code(), charge.chargeId(), network,
-                coupon.settlementCurrency(), request.currency(), discountMinorUnits);
+                coupon.settlementCurrency(), discountMinorUnits);
 
         RedemptionReceipt receipt = new RedemptionReceipt(
                 redemptionId,
@@ -110,6 +105,47 @@ public class RedemptionService {
         promotionLedger.book(receipt);
 
         return receipt;
+    }
+
+    /**
+     * A promotion may only be redeemed in the currency it is denominated in.
+     *
+     * <p>Refused rather than converted, and the refusal is the fix. COUPON-510 converted at
+     * redemption, and every defect it caused followed from that one decision:
+     *
+     * <ul>
+     *   <li>the receipt carried a converted amount beside the promotion's own currency label,
+     *       so the label contradicted the figure (MFC-2.3);</li>
+     *   <li>{@code order-service} has no currency field on the receipt and subtracted the
+     *       converted figure from a subtotal in another currency — a silent mispricing on the
+     *       storefront checkout path (MFC-6.3);</li>
+     *   <li>the promotion ledger and the finance attribution export received amounts in two
+     *       currencies in one accumulator (MFC-3.1);</li>
+     *   <li>the charged total became a function of an FX rate, so which Strong Customer
+     *       Authentication exemption threshold applied moved with the market (SCA-2.4).</li>
+     * </ul>
+     *
+     * <p>Refusing is a visible 409 the storefront can act on: offer the shopper the equivalent
+     * code for their storefront. Converting was silent and wrong in four places at once.
+     *
+     * <p>Cross-storefront redemption — the problem COUPON-510 set out to solve — belongs in the
+     * catalogue: issue an equivalent code per currency. That keeps the amount, its label, the
+     * ledger and the charge currency consistent, and it needs no runtime FX at all.
+     */
+    private static void requireSameCurrency(Coupon coupon, RedemptionRequest request) {
+        if (!coupon.settlementCurrency().equals(request.currency())) {
+            throw new CurrencyMismatchException(coupon.code(),
+                    coupon.settlementCurrency(), request.currency());
+        }
+    }
+
+    /** The promotion is not denominated in the currency the order is priced in. */
+    public static class CurrencyMismatchException extends RuntimeException {
+        public CurrencyMismatchException(String code, String couponCurrency,
+                                         String orderCurrency) {
+            super("coupon " + code + " is a " + couponCurrency + " promotion and cannot be"
+                    + " redeemed against an order priced in " + orderCurrency);
+        }
     }
 
     public static class UnknownCouponException extends RuntimeException {

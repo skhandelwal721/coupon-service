@@ -81,6 +81,18 @@ public class RedemptionController {
         return e.getMessage();
     }
 
+    /**
+     * The promotion is not denominated in the order's currency.
+     *
+     * <p>A 409 the storefront can act on — offer the shopper the equivalent code for their
+     * storefront — rather than a converted amount nobody asked for.
+     */
+    @ExceptionHandler(RedemptionService.CurrencyMismatchException.class)
+    @ResponseStatus(HttpStatus.CONFLICT)
+    public String currencyMismatch(RedemptionService.CurrencyMismatchException e) {
+        return e.getMessage();
+    }
+
     @ExceptionHandler(RedemptionService.UnknownCouponException.class)
     @ResponseStatus(HttpStatus.NOT_FOUND)
     public String unknownCoupon(RedemptionService.UnknownCouponException e) {

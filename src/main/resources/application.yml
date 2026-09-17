@@ -50,15 +50,19 @@ settlement:
     structuredAddress: true
 
 # --------------------------------------------------------------------------------------
-# Multi-currency promotions — COUPON-510
+# Promotion currency — COUPON-511
 #
-# A code picked up on one storefront can be redeemed on another. Conversion happens at
-# redemption so the checkout path never waits on a rate lookup.
+# A promotion is redeemable only in the currency it is denominated in. There is no runtime FX
+# conversion: COUPON-510 converted at redemption and the conversion was the defect.
+#
+# Cross-storefront redemption is solved in the catalogue instead, by issuing an equivalent code
+# per currency. That keeps the amount, its currency label, the promotion ledger and the charge
+# currency consistent, and needs no rate at runtime.
 # --------------------------------------------------------------------------------------
 promotions:
-  multiCurrency:
-    enabled: true
-    corridors: GBP:EUR,EUR:GBP
+  currency:
+    convertAtRedemption: false
+    refuseOnMismatch: true
 
 analytics:
   redemptionEndpoint: https://analytics.beaconstone.example/v1/events/redemption
