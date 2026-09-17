@@ -4,21 +4,29 @@ import com.beaconstone.coupon.redemption.RedemptionRequest;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class DeviceFingerprintTest {
 
     private final DeviceFingerprint fingerprints = new DeviceFingerprint();
 
     @Test
-    void combinesDeviceOriginCardAndCoupon() {
+    void isStableForTheSameComponents() {
+        assertEquals(
+                fingerprints.keyFor(request("NW-VISA-10", "dev-1", "203.0.113.7", "4111111111111111")),
+                fingerprints.keyFor(request("NW-VISA-10", "dev-1", "203.0.113.7", "4111111111111111")));
+    }
+
+    /** COUPON-560: the counter must not hold the values the key was built from. */
+    @Test
+    void doesNotCarryTheComponentsInPlainText() {
         String key = fingerprints.keyFor(request("NW-VISA-10", "dev-1", "203.0.113.7",
                 "4111111111111111"));
 
-        assertTrue(key.contains("dev-1"));
-        assertTrue(key.contains("203.0.113.7"));
-        assertTrue(key.contains("NW-VISA-10"));
+        assertFalse(key.contains("4111111111111111"));
+        assertFalse(key.contains("203.0.113.7"));
+        assertFalse(key.contains("dev-1"));
     }
 
     @Test
@@ -44,11 +52,16 @@ class DeviceFingerprintTest {
 
     @Test
     void treatsAMissingComponentAsUnknownRatherThanColliding() {
-        String key = fingerprints.keyFor(
+        String withoutEmail = fingerprints.keyFor(
                 new RedemptionRequest("NW-VISA-10", "inv-1", "4111111111111111", "GBP",
                         "GB-EC2A4BX", "dev-1", "203.0.113.7", null));
 
-        assertTrue(key.contains("dev-1"));
+        assertEquals(withoutEmail,
+                fingerprints.keyFor(request("NW-VISA-10", "dev-1", "203.0.113.7",
+                        "4111111111111111")));
+        assertNotEquals(withoutEmail,
+                fingerprints.keyFor(request("NW-VISA-10", "dev-2", "203.0.113.7",
+                        "4111111111111111")));
     }
 
     private static RedemptionRequest request(String couponCode, String deviceId,
