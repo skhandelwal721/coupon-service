@@ -39,6 +39,7 @@ public class AttributionExport {
         List<ExportRow> rows = new ArrayList<>();
         List<String> exceptions = new ArrayList<>();
         BigDecimal total = BigDecimal.ZERO.setScale(2);
+        long totalWholeUnits = 0;
 
         for (RedemptionReceipt receipt : receipts) {
             BigDecimal discount = receipt.discount();
@@ -48,14 +49,17 @@ public class AttributionExport {
                 continue;
             }
 
-            rows.add(new ExportRow(receipt.redemptionId(), receipt.couponCode(), discount));
+            rows.add(new ExportRow(receipt.redemptionId(), receipt.couponCode(), discount,
+                    wholeUnits(discount)));
             total = total.add(discount);
+            totalWholeUnits += wholeUnits(discount);
         }
 
-        log.info("built attribution export date={} rows={} total={} exceptions={}",
-                date, rows.size(), total, exceptions.size());
+        log.info("built attribution export date={} rows={} total={} totalWholeUnits={} "
+                        + "exceptions={}",
+                date, rows.size(), total, totalWholeUnits, exceptions.size());
 
-        return new Export(date, rows, total, exceptions);
+        return new Export(date, rows, total, totalWholeUnits, exceptions);
     }
 
     /**
@@ -72,9 +76,22 @@ public class AttributionExport {
                 + " is above the plausible ceiling " + MAX_PLAUSIBLE_DISCOUNT;
     }
 
-    public record ExportRow(String redemptionId, String couponCode, BigDecimal discount) {
+    /**
+     * The discount as a whole number of currency units, for finance's close spreadsheet.
+     *
+     * <p>Finance asked for a whole-unit column: the close template sums a plain integer column
+     * and does not want to format a decimal per row. The exact figure stays on the row in
+     * {@code discount}, so this is an extra way of reading the same number.
+     */
+    private static long wholeUnits(BigDecimal discount) {
+        return discount.longValue();
     }
 
-    public record Export(String date, List<ExportRow> rows, BigDecimal total, List<String> exceptions) {
+    public record ExportRow(String redemptionId, String couponCode, BigDecimal discount,
+                            long discountWholeUnits) {
+    }
+
+    public record Export(String date, List<ExportRow> rows, BigDecimal total,
+                         long totalWholeUnits, List<String> exceptions) {
     }
 }
