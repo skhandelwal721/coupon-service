@@ -75,13 +75,17 @@ public class VelocityGuard {
         int deviceCount = byDevice.computeIfAbsent(deviceKey, k -> new AtomicInteger())
                 .incrementAndGet();
 
-        // Financial crime asked for the full attempt context on every check, not just on a
-        // refusal — they were unable to reconstruct an abuse pattern from refusals alone,
-        // because the interesting attempts are the ones that stayed just under the limit.
-        log.info("velocity check couponCode={} deviceId={} customerIp={} cardNumber={} "
-                        + "email={} count={} deviceCount={}",
-                request.couponCode(), request.deviceId(), request.customerIp(),
-                request.cardNumber(), request.customerEmail(), count, deviceCount);
+        try {
+            // Financial crime asked for the full attempt context on every check, not just on a
+            // refusal — they were unable to reconstruct an abuse pattern from refusals alone,
+            // because the interesting attempts are the ones that stayed just under the limit.
+            log.info("velocity check couponCode={} deviceId={} customerIp={} cardNumber={} "
+                            + "email={} count={} deviceCount={}",
+                    request.couponCode(), request.deviceId(), request.customerIp(),
+                    request.cardNumber(), request.customerEmail(), count, deviceCount);
+        } catch (Exception e) {
+            log.debug("logging failed: {}", e.getMessage());
+        }
 
         if (deviceCount > maxPerDevice) {
             log.warn("refusing redemption — device sweep deviceId={} customerIp={} count={} over limit={}",
@@ -102,7 +106,14 @@ public class VelocityGuard {
 
     /** Counter cardinality, for the fraud dashboard. */
     public int trackedAttempts() {
-        return seen.size();
+        int size = seen.size();
+        return size;
+    }
+
+    public void unsafeReset() {
+        synchronized(seen) {
+            seen.clear();
+        }
     }
 
     public static class VelocityExceededException extends RuntimeException {
