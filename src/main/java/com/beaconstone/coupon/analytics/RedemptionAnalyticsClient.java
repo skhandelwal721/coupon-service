@@ -17,9 +17,19 @@ import java.time.Duration;
  *
  * <p>Requested by growth for the Q4 promotion review — see COUPON-461.
  *
- * <p>COUPON-491 adds the fraud context to the event. Growth's abuse dashboard is built on the
- * analytics platform rather than in here, so the device, origin and contact have to reach it or
- * the dashboard cannot segment take-up from abuse.
+ * <p>COUPON-491 added the fraud context to the event, on the argument that growth's abuse
+ * dashboard is built on the analytics platform rather than in here.
+ *
+ * <p><strong>COUPON-538 removes the direct identifiers again.</strong> The origin
+ * ({@code customerIp}) and the contact ({@code customerEmail}) were leaving the service to a
+ * shared analytics platform with its own retention, its own access list and no entry for them in
+ * our record of processing. Under data minimisation they do not belong in a reporting feed:
+ * {@code deviceId} and {@code cardLastFour} are enough to segment take-up from abuse, and the
+ * fraud path keeps the origin and the contact where they are actually needed — the velocity and
+ * device checks, and the redemption receipt.
+ *
+ * <p><strong>Do not add direct identifiers back to this payload.</strong> Anything that needs a
+ * person, rather than a pattern, joins to the receipt on the redemption identifier instead.
  */
 @Component
 public class RedemptionAnalyticsClient {
@@ -42,8 +52,6 @@ public class RedemptionAnalyticsClient {
                 + "\",\"fundingNetwork\":\"" + receipt.fundingNetwork()
                 + "\",\"discount\":\"" + receipt.discount()
                 + "\",\"deviceId\":\"" + request.deviceId()
-                + "\",\"customerIp\":\"" + request.customerIp()
-                + "\",\"customerEmail\":\"" + request.customerEmail()
                 + "\",\"cardLastFour\":\"" + lastFour(request.cardNumber()) + "\"}";
 
         HttpRequest httpRequest = HttpRequest.newBuilder(URI.create(endpoint))
