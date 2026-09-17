@@ -43,9 +43,8 @@ public class AttributionExport {
         for (RedemptionReceipt receipt : receipts) {
             BigDecimal discount = receipt.discount();
 
-            if (discount.compareTo(MAX_PLAUSIBLE_DISCOUNT) > 0) {
-                exceptions.add("redemption " + receipt.redemptionId() + " discount " + discount
-                        + " is above the plausible ceiling " + MAX_PLAUSIBLE_DISCOUNT);
+            if (isImplausible(discount)) {
+                exceptions.add(heldForReview(receipt, discount));
                 continue;
             }
 
@@ -57,6 +56,20 @@ public class AttributionExport {
                 date, rows.size(), total, exceptions.size());
 
         return new Export(date, rows, total, exceptions);
+    }
+
+    /**
+     * The plausibility ceiling, expressed once. A discount above it is a data error rather than
+     * a real promotion — see the class javadoc for what this check does and does not catch.
+     */
+    private static boolean isImplausible(BigDecimal discount) {
+        return discount.compareTo(MAX_PLAUSIBLE_DISCOUNT) > 0;
+    }
+
+    /** The exception line for a discount held out of the export. Wording unchanged. */
+    private static String heldForReview(RedemptionReceipt receipt, BigDecimal discount) {
+        return "redemption " + receipt.redemptionId() + " discount " + discount
+                + " is above the plausible ceiling " + MAX_PLAUSIBLE_DISCOUNT;
     }
 
     public record ExportRow(String redemptionId, String couponCode, BigDecimal discount) {
