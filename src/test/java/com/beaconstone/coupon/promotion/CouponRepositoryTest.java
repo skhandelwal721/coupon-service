@@ -6,7 +6,6 @@ import org.junit.jupiter.api.Test;
 import java.math.BigDecimal;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class CouponRepositoryTest {
@@ -32,12 +31,27 @@ class CouponRepositoryTest {
         assertTrue(coupon.isSepaSettled());
     }
 
+    /**
+     * Regression for COUPON-551.
+     *
+     * <p>COUPON-550 funded this offer on Visa alone, and this test asserted that Mastercard
+     * was excluded — so the catalogue and the suite agreed with each other and both disagreed
+     * with the campaign's funding agreements. The offer is advertised to every shopper on the
+     * DE/FR/NL storefronts, so it has to be funded on every network those storefronts accept.
+     *
+     * <p>Enumerates {@link CardNetwork#values()} rather than listing the two networks we
+     * support today, so adding a third network to the platform fails here until this
+     * campaign's funding for it is confirmed.
+     */
     @Test
-    void theEuAcquisitionCouponIsVisaFunded() {
+    void theEuAcquisitionCouponIsFundedOnEveryNetworkTheStorefrontAccepts() {
         Coupon coupon = repository.find("BS-EU-20").orElseThrow();
 
-        assertTrue(coupon.fundedBy().contains(CardNetwork.VISA));
-        assertFalse(coupon.fundedBy().contains(CardNetwork.MASTERCARD));
+        for (CardNetwork network : CardNetwork.values()) {
+            assertTrue(coupon.fundedBy().contains(network),
+                    "BS-EU-20 is advertised storefront-wide but is not funded on " + network
+                            + " — a shopper paying with it is charged and then refused");
+        }
     }
 
     @Test

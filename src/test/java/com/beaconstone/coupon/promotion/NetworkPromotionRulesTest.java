@@ -30,6 +30,24 @@ class NetworkPromotionRulesTest {
     }
 
     /**
+     * Regression for COUPON-551 — the bug as a customer met it.
+     *
+     * <p>With the offer funded on Visa alone, a Mastercard shopper reached this check
+     * <em>after</em> the charge had already been taken, and was refused here. The charge stood,
+     * at the discounted amount, with no promotion booked against it.
+     *
+     * <p>Reads the entry from the catalogue rather than rebuilding it, so the test fails if the
+     * catalogue regresses.
+     */
+    @Test
+    void theEuAcquisitionCouponIsEligibleOnEitherFundedNetwork() {
+        Coupon euOffer = new CouponRepository().find("BS-EU-20").orElseThrow();
+
+        assertTrue(rules.isEligible(euOffer, charge("VISA")));
+        assertTrue(rules.isEligible(euOffer, charge("MASTERCARD")));
+    }
+
+    /**
      * Guard rail for a change to what {@code cardType} means.
      *
      * <p>Every network billing-service can charge has to resolve to a funding network here,

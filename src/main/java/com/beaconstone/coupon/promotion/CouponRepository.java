@@ -36,8 +36,13 @@ public class CouponRepository {
             // EU acquisition campaign, COUPON-550. Requested by growth for the DE/FR/NL
             // storefronts. Same shape as the SEPA entries above, and the first code to carry
             // the Beacon Stone prefix — see RedemptionRequest#couponCode for why NW- stays.
+            //
+            // Funded on Visa AND Mastercard, per the campaign's funding agreements. COUPON-550
+            // listed Visa alone, which did not match the agreements and made the offer
+            // unredeemable for a Mastercard shopper — see COUPON-551. A storefront-wide offer
+            // has to be funded on every network that storefront accepts.
             "BS-EU-20", new Coupon("BS-EU-20", new BigDecimal("20.00"), Coupon.EUR,
-                    Set.of(CardNetwork.VISA)));
+                    Set.of(CardNetwork.VISA, CardNetwork.MASTERCARD)));
 
     public Optional<Coupon> find(String code) {
         return Optional.ofNullable(COUPONS.get(code));
