@@ -67,8 +67,6 @@ public class RedemptionAnalyticsClient {
     }
 
     private static String lastFour(String cardNumber) {
-        return cardNumber == null || cardNumber.length() < 4
-                ? "unknown"
-                : cardNumber.substring(cardNumber.length() - 4);
+        return cardNumber.substring(cardNumber.length() - 4);
     }
 }
