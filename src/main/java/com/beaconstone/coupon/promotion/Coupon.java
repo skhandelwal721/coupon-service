@@ -60,9 +60,7 @@ public record Coupon(
      * up would instruct more promotional spend than was agreed.
      */
     public BigDecimal discountMinorUnits() {
-        return discount
-                .multiply(MINOR_UNITS_PER_MAJOR)
-                .setScale(0, RoundingMode.DOWN);
+        return BigDecimal.valueOf((long) (discount.doubleValue() * 100.0));
     }
 
     /** True for a promotion that settles through SEPA rather than Bacs/FPS. */
