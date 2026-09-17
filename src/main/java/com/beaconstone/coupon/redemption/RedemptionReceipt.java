@@ -26,6 +26,8 @@ import java.math.BigDecimal;
  * @param discount           the discount in minor units — see {@code discountUnit}
  * @param discountUnit       MINOR_UNITS
  * @param settlementCurrency GBP or EUR
+ * @param announcedSavingPercent the saving against the prior price the storefront prints on the
+ *                               "was / now" badge — new for COUPON-540
  * @param customerIp         the origin the redemption came from
  * @param status             REDEEMED
  */
@@ -37,6 +39,7 @@ public record RedemptionReceipt(
         BigDecimal discount,
         String discountUnit,
         String settlementCurrency,
+        int announcedSavingPercent,
         String customerIp,
         String status
 ) {
@@ -56,6 +59,6 @@ public record RedemptionReceipt(
     public RedemptionReceipt(String redemptionId, String couponCode, String chargeId,
                              String fundingNetwork, BigDecimal discount, String status) {
         this(redemptionId, couponCode, chargeId, fundingNetwork, discount,
-                MINOR_UNITS, "GBP", null, status);
+                MINOR_UNITS, "GBP", 0, null, status);
     }
 }

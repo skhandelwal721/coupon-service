@@ -83,10 +83,15 @@ public class RedemptionService {
         // Minor units, so one settlement pipeline covers Bacs/FPS and SEPA. See Coupon.
         java.math.BigDecimal discountMinorUnits = coupon.discountMinorUnits();
 
+        // The saving the storefront prints on the "was / now" badge — COUPON-540. The prior
+        // price is the charge subtotal, the pre-discount figure the charge was taken against.
+        int announcedSavingPercent = coupon.announcedSavingPercent(charge.subtotal());
+
         log.info("redeemed redemptionId={} couponCode={} chargeId={} network={} currency={} "
-                        + "discountMinorUnits={} sepaSettled={}",
+                        + "discountMinorUnits={} savingPercent={} sepaSettled={}",
                 redemptionId, coupon.code(), charge.chargeId(), network,
-                coupon.settlementCurrency(), discountMinorUnits, coupon.isSepaSettled());
+                coupon.settlementCurrency(), discountMinorUnits, announcedSavingPercent,
+                coupon.isSepaSettled());
 
         RedemptionReceipt receipt = new RedemptionReceipt(
                 redemptionId,
@@ -96,6 +101,7 @@ public class RedemptionService {
                 discountMinorUnits,
                 RedemptionReceipt.MINOR_UNITS,
                 coupon.settlementCurrency(),
+                announcedSavingPercent,
                 request.customerIp(),
                 "REDEEMED");
 

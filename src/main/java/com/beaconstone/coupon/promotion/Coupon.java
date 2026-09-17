@@ -36,6 +36,9 @@ public record Coupon(
     /** Minor units per major unit. Both GBP and EUR are two-decimal currencies. */
     private static final BigDecimal MINOR_UNITS_PER_MAJOR = new BigDecimal("100");
 
+    /** Percent basis for the announced saving. */
+    private static final BigDecimal PERCENT = new BigDecimal("100");
+
     /**
      * Back-compatible form, for the sterling catalogue and for call sites that predate
      * {@code settlementCurrency}.
@@ -63,6 +66,24 @@ public record Coupon(
         return discount
                 .multiply(MINOR_UNITS_PER_MAJOR)
                 .setScale(0, RoundingMode.DOWN);
+    }
+
+    /**
+     * The announced saving against the prior price, as a whole percentage.
+     *
+     * <p>New for COUPON-540. Directive (EU) 2019/2161 adds Article 6a to the Price Indication
+     * Directive 98/6/EC: an announced price reduction has to be expressed against the prior
+     * price. The storefront prints this as the "was / now" saving badge, so this figure is the
+     * one the customer reads at checkout.
+     *
+     * <p>{@code priorPrice} is the charge subtotal — the pre-discount figure billing-service
+     * took the charge against.
+     */
+    public int announcedSavingPercent(BigDecimal priorPrice) {
+        return discount
+                .multiply(PERCENT)
+                .divide(priorPrice, 0, RoundingMode.UP)
+                .intValue();
     }
 
     /** True for a promotion that settles through SEPA rather than Bacs/FPS. */
