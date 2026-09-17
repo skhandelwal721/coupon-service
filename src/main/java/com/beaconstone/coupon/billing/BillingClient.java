@@ -15,8 +15,10 @@ import java.math.BigDecimal;
  * actually settled, so we do not complete one without reading the charge back. When this call
  * fails we hold the redemption rather than applying an unreconciled discount.
  *
- * <p>Since COUPON-530 we send the promotional deduction with the charge, so a discounted order
- * is one card transaction instead of a charge plus a refund.
+ * <p><strong>No monetary amount leaves this service towards the payment processor.</strong> We
+ * charge the invoice; we never tell billing-service what to deduct from it. COUPON-530 sent a
+ * promotional deduction and COUPON-531 removed it — see
+ * {@code docs/api/promotional-adjustment-prerequisites.md} for what has to be true first.
  *
  * <p>We call {@code POST /v1/invoices/{invoiceId}/charge}. billing-service 4.12 introduces
  * {@code POST /v1/charges} and marks it preferred; we have deliberately not migrated. Blocked
@@ -59,7 +61,7 @@ public class BillingClient {
      * response carrying a field our pinned contract version does not declare fails here.
      */
     public BillingChargeView charge(String invoiceId, String cardNumber, String currency,
-                                   String billingPostcode, BigDecimal promotionalAdjustment) {
+                                   String billingPostcode) {
         String url = baseUrl + chargePath.replace("{invoiceId}", invoiceId);
 
         // SEPA structured-address form. The same element goes on to the settlement
@@ -74,13 +76,10 @@ public class BillingClient {
                         + "postcodeSent={}",
                 invoiceId, url, currency, maskedCardNumber, sepaPostcode != null);
 
-        log.info("applying promotional adjustment invoiceId={} adjustment={}",
-                invoiceId, promotionalAdjustment);
-
         // Stubbed for the fixture: the real client POSTs
         // { cardNumber: maskedCardNumber, currency, billingPostcode: sepaPostcode } to the
         // charge path and deserializes into BillingChargeView with the strict ObjectMapper
-        // configured in application.yml. promotionalAdjustment goes on the same body.
+        // configured in application.yml.
         return new BillingChargeView(
                 "chg_9f3b7c21",
                 invoiceId,

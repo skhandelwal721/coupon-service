@@ -62,13 +62,13 @@ public class RedemptionService {
         Coupon coupon = couponRepository.find(request.couponCode())
                 .orElseThrow(() -> new UnknownCouponException(request.couponCode()));
 
-        // COUPON-530: send the promotional deduction with the charge. billing-service applies
-        // it to the invoice subtotal, so a discounted order is one card transaction instead of
-        // a full charge followed by a refund for the difference — one statement line, one
-        // interchange fee.
+        // The invoice is charged in full. The discount reaches the customer through the refund
+        // leg, and that is deliberate — see docs/api/promotional-adjustment-prerequisites.md.
+        // Deducting it here instead reduces the payable amount twice, because order-service
+        // subtracts it again from what it shows the shopper.
         BillingChargeView charge = billingClient.charge(
                 request.invoiceId(), request.cardNumber(), request.currency(),
-                request.billingPostcode(), coupon.discountMinorUnits());
+                request.billingPostcode());
 
         auditor.requireAccountable(charge);
 
