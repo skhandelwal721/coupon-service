@@ -3,6 +3,7 @@ package com.beaconstone.coupon.redemption;
 import com.beaconstone.coupon.analytics.RedemptionAnalyticsClient;
 import com.beaconstone.coupon.audit.RedemptionAuditor;
 import com.beaconstone.coupon.fraud.VelocityGuard;
+import com.beaconstone.coupon.payments.AmexEuropeEligibility;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -97,6 +98,22 @@ public class RedemptionController {
     @ExceptionHandler(RedemptionService.CouponNotAvailableInCountryException.class)
     @ResponseStatus(HttpStatus.NOT_FOUND)
     public String notAvailableInCountry(RedemptionService.CouponNotAvailableInCountryException e) {
+        return e.getMessage();
+    }
+
+    /**
+     * PAY-8100. AMEX was requested where it is not offered — a region outside the European set,
+     * with the option disabled, or with no country. Without this handler the
+     * {@link AmexEuropeEligibility.AmexNotOfferedException} thrown by the eligibility gate would
+     * propagate uncaught and surface to the customer as a generic {@code 500}, even though the
+     * request was refused deliberately and safely before any charge.
+     *
+     * <p>Mapped to {@code 404}, consistent with the country-restricted coupon case above: from
+     * the customer's point of view AMEX is simply not on offer here, and no charge was taken.
+     */
+    @ExceptionHandler(AmexEuropeEligibility.AmexNotOfferedException.class)
+    @ResponseStatus(HttpStatus.NOT_FOUND)
+    public String amexNotOffered(AmexEuropeEligibility.AmexNotOfferedException e) {
         return e.getMessage();
     }
 }

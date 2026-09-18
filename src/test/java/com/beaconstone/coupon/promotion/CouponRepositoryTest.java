@@ -47,13 +47,25 @@ class CouponRepositoryTest {
      */
     @Test
     void theEuAcquisitionCouponIsFundedOnEveryNetworkTheStorefrontAccepts() {
-        Coupon coupon = repository.find("BS-EU-20").orElseThrow();
+        // PAY-8100: "every network the storefront accepts" now depends on whether AMEX is being
+        // offered in Europe. The offer must be funded on exactly the accepted set — Visa and
+        // Mastercard always, AMEX only when the AMEX-in-Europe option is on.
 
+        // AMEX-in-Europe ON: Visa, Mastercard and AMEX are all accepted, so all must be funded.
+        Coupon withAmex = new CouponRepository(false, true).find("BS-EU-20").orElseThrow();
         for (CardNetwork network : CardNetwork.values()) {
-            assertTrue(coupon.fundedBy().contains(network),
-                    "BS-EU-20 is advertised storefront-wide but is not funded on " + network
-                            + " — a shopper paying with it is charged and then refused");
+            assertTrue(withAmex.fundedBy().contains(network),
+                    "with AMEX-in-Europe on, BS-EU-20 must be funded on " + network
+                            + " — an accepted-but-unfunded network is charged then refused");
         }
+
+        // AMEX-in-Europe OFF: AMEX is not accepted, so it must NOT be listed as funded — funding
+        // an option that is not being offered is the flag-gating bug this fix closes.
+        Coupon withoutAmex = new CouponRepository(false, false).find("BS-EU-20").orElseThrow();
+        assertTrue(withoutAmex.fundedBy().contains(CardNetwork.VISA));
+        assertTrue(withoutAmex.fundedBy().contains(CardNetwork.MASTERCARD));
+        assertFalse(withoutAmex.fundedBy().contains(CardNetwork.AMEX),
+                "with AMEX-in-Europe off, BS-EU-20 must NOT be funded on AMEX");
     }
 
     @Test
@@ -186,12 +198,19 @@ class CouponRepositoryTest {
      */
     @Test
     void theNlCouponIsFundedOnEveryNetworkTheStorefrontAccepts() {
-        Coupon coupon = new CouponRepository(true).find("BS-NL-20").orElseThrow();
-
+        // AMEX-in-Europe ON (NL launch on): all accepted networks funded, AMEX included.
+        Coupon withAmex = new CouponRepository(true, true).find("BS-NL-20").orElseThrow();
         for (CardNetwork network : CardNetwork.values()) {
-            assertTrue(coupon.fundedBy().contains(network),
-                    "BS-NL-20 is advertised on the NL storefront but is not funded on " + network);
+            assertTrue(withAmex.fundedBy().contains(network),
+                    "with AMEX-in-Europe on, BS-NL-20 must be funded on " + network);
         }
+
+        // AMEX-in-Europe OFF (NL launch on): AMEX not accepted, so must not be funded.
+        Coupon withoutAmex = new CouponRepository(true, false).find("BS-NL-20").orElseThrow();
+        assertTrue(withoutAmex.fundedBy().contains(CardNetwork.VISA));
+        assertTrue(withoutAmex.fundedBy().contains(CardNetwork.MASTERCARD));
+        assertFalse(withoutAmex.fundedBy().contains(CardNetwork.AMEX),
+                "with AMEX-in-Europe off, BS-NL-20 must NOT be funded on AMEX");
     }
 
     /** The NL code must be submittable through the edge validator. */
