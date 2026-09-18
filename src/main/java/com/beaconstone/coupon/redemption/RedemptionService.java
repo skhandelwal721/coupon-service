@@ -21,6 +21,10 @@ import java.util.UUID;
  * published charge contract:
  *
  * <ol>
+ *   <li>Resolve the coupon, and check it is available in the request's country
+ *       ({@link Coupon#isAvailableIn}). This is before the charge on purpose — a coupon that
+ *       is not offered in this country must not take a card charge that would then have to be
+ *       refunded.</li>
  *   <li>Charge the invoice through billing-service and read the charge back
  *       ({@link BillingClient}).</li>
  *   <li>Check the charge is accountable — {@code subtotal + tax == total}
@@ -31,9 +35,10 @@ import java.util.UUID;
  *       ({@link PromotionLedger}).</li>
  * </ol>
  *
- * <p>Steps 2 and 3 are the gates. Neither has a default branch: a charge we cannot account
- * for, or a network we cannot attribute, holds the redemption. We would rather hold a discount
- * than book one against a charge we do not understand.
+ * <p>Steps 3 and 4 are the funding gates. Neither has a default branch: a charge we cannot
+ * account for, or a network we cannot attribute, holds the redemption. We would rather hold a
+ * discount than book one against a charge we do not understand. Step 1's country gate is the
+ * one gate that fires <em>before</em> money moves, because it needs no charge to decide.
  */
 @Service
 public class RedemptionService {
@@ -61,6 +66,14 @@ public class RedemptionService {
     public RedemptionReceipt redeem(RedemptionRequest request) {
         Coupon coupon = couponRepository.find(request.couponCode())
                 .orElseThrow(() -> new UnknownCouponException(request.couponCode()));
+
+        // COUPON-573: a country-restricted coupon (e.g. the Netherlands-only BS-NL-20) may only
+        // be redeemed from a country it is offered in. Checked before the charge so a shopper on
+        // the wrong storefront is refused rather than charged and refunded. Unrestricted coupons
+        // pass this unconditionally, so the existing catalogue is unaffected.
+        if (!coupon.isAvailableIn(request.billingCountry())) {
+            throw new CouponNotAvailableInCountryException(coupon.code(), request.billingCountry());
+        }
 
         // COUPON-530: send the promotional deduction with the charge. billing-service applies
         // it to the invoice subtotal, so a discounted order is one card transaction instead of
@@ -113,6 +126,17 @@ public class RedemptionService {
     public static class PromotionNotFundedException extends RuntimeException {
         public PromotionNotFundedException(String message) {
             super(message);
+        }
+    }
+
+    /**
+     * A country-restricted coupon was redeemed from a country it is not offered in (or with no
+     * country at all). No charge is taken — this fires before billing-service is called.
+     */
+    public static class CouponNotAvailableInCountryException extends RuntimeException {
+        public CouponNotAvailableInCountryException(String code, String country) {
+            super("coupon " + code + " is not available in country "
+                    + (country == null || country.isBlank() ? "<none>" : country));
         }
     }
 }
