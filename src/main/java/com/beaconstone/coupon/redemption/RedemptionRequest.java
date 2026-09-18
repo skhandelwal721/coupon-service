@@ -1,5 +1,6 @@
 package com.beaconstone.coupon.redemption;
 
+import com.beaconstone.coupon.billing.CardMask;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
@@ -77,4 +78,50 @@ public record RedemptionRequest(
         @Email(message = "customerEmail must be a valid email address")
         String customerEmail
 ) {
+
+    /** What replaces the local part of an email. */
+    private static final String REDACTED = "***";
+
+    /**
+     * Redacted rendering, from COUPON-562.
+     *
+     * <p>A record's generated {@code toString()} prints every component, so the default form of
+     * this one prints a full card number and a full email address. Nothing logs the request
+     * object today — the velocity check names the fields it wants — but the default is one
+     * {@code log.debug("request={}", request)} away from putting a PAN in a log file, and the
+     * framework reaches for {@code toString()} on its own in validation-failure messages.
+     *
+     * <p>So the card is rendered through the standard display mask and the email keeps only its
+     * domain. Everything a responder actually diagnoses from — coupon code, invoice, currency,
+     * device, origin — is unchanged, because a redaction that removes the diagnostic value is a
+     * redaction someone works around.
+     *
+     * <p>This changes no log output that exists today. It changes what the default would print
+     * if anything ever did.
+     */
+    @Override
+    public String toString() {
+        return "RedemptionRequest[couponCode=" + couponCode
+                + ", invoiceId=" + invoiceId
+                + ", cardNumber=" + CardMask.masked(cardNumber)
+                + ", currency=" + currency
+                + ", billingPostcode=" + billingPostcode
+                + ", deviceId=" + deviceId
+                + ", customerIp=" + customerIp
+                + ", customerEmail=" + redactedEmail(customerEmail)
+                + "]";
+    }
+
+    /**
+     * The email with its local part removed — {@code shopper@example.com} becomes
+     * {@code ***@example.com}. The domain is kept because it is what financial crime pattern
+     * abuse on, and it identifies nobody on its own.
+     */
+    private static String redactedEmail(String email) {
+        if (email == null || email.isBlank()) {
+            return REDACTED;
+        }
+        int at = email.lastIndexOf('@');
+        return at < 0 ? REDACTED : REDACTED + email.substring(at);
+    }
 }

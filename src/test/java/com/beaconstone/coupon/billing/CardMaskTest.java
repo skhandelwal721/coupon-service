@@ -22,6 +22,17 @@ class CardMaskTest {
         assertEquals("****", cardMask.mask("41"));
     }
 
+    /**
+     * The instance and static forms must not drift — {@code mask} delegates to {@code masked},
+     * and callers that cannot hold the component use the static form.
+     */
+    @Test
+    void theInstanceAndStaticFormsAgree() {
+        assertEquals(cardMask.mask("4111111111111111"), CardMask.masked("4111111111111111"));
+        assertEquals(cardMask.mask("41"), CardMask.masked("41"));
+        assertEquals(cardMask.mask(null), CardMask.masked(null));
+    }
+
     /** The property we are after: the full PAN is not recoverable from the masked value. */
     @Test
     void doesNotLeaveTheFullPanInTheOutput() {

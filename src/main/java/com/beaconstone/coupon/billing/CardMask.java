@@ -25,6 +25,20 @@ public class CardMask {
      * @return {@code ****} followed by the last four digits
      */
     public String mask(String cardNumber) {
+        return masked(cardNumber);
+    }
+
+    /**
+     * The masked form, for callers that cannot hold a reference to this component.
+     *
+     * <p>Same rule as {@link #mask(String)}, which delegates here — the logic lives in one
+     * place so the two forms cannot drift. Added under COUPON-562 for {@code
+     * RedemptionRequest#toString()}, which is a record method and so cannot be injected.
+     *
+     * @param cardNumber the full PAN
+     * @return {@code ****} followed by the last four digits
+     */
+    public static String masked(String cardNumber) {
         if (cardNumber == null || cardNumber.length() < 4) {
             return MASK;
         }
