@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import java.math.BigDecimal;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class CouponRepositoryTest {
@@ -13,6 +14,7 @@ class CouponRepositoryTest {
     /** The pattern {@code RedemptionRequest#couponCode} enforces at the edge. */
     private static final String REQUEST_PATTERN = "^(BS|NW)-[A-Z]{2,4}-\\d{2}$";
 
+    // Base catalogue, NL launch off — the no-arg constructor keeps the pre-COUPON-573 behaviour.
     private final CouponRepository repository = new CouponRepository();
 
     @Test
@@ -77,6 +79,19 @@ class CouponRepositoryTest {
                 repository.find("NW-SEPA-15").orElseThrow().discount());
     }
 
+    /**
+     * The existing catalogue is unrestricted — no entry gained a country restriction. This is
+     * the guarantee that COUPON-573 is additive: only the new BS-NL-20 is country-scoped.
+     */
+    @Test
+    void theExistingCatalogueIsNotCountryRestricted() {
+        for (String code : new String[] {
+                "NW-VISA-10", "NW-MC-15", "NW-SEPA-10", "NW-SEPA-25", "NW-SEPA-15", "BS-EU-20"}) {
+            assertFalse(repository.find(code).orElseThrow().isCountryRestricted(),
+                    code + " must stay catalogue-wide — COUPON-573 only restricts BS-NL-20");
+        }
+    }
+
     @Test
     void anUnknownCodeResolvesToNothing() {
         assertTrue(repository.find("BS-NOPE-99").isEmpty());
@@ -111,5 +126,89 @@ class CouponRepositoryTest {
         assertTrue("NW-SEPA-10".matches(REQUEST_PATTERN));
         assertTrue("NW-SEPA-25".matches(REQUEST_PATTERN));
         assertTrue("NW-SEPA-15".matches(REQUEST_PATTERN));
+    }
+
+    // -----------------------------------------------------------------------------------------
+    // COUPON-573 — Netherlands launch, BS-NL-20, gated on promotions.nlLaunch.enabled.
+    // -----------------------------------------------------------------------------------------
+
+    /**
+     * With the launch flag off — the default, and every environment except Production — the
+     * coupon is absent. A code that is not in the catalogue cannot be resolved, so it cannot be
+     * redeemed or charged against. This is what "production only" means in code.
+     */
+    @Test
+    void theNlCouponIsAbsentWhenTheLaunchFlagIsOff() {
+        CouponRepository off = new CouponRepository(false);
+
+        assertTrue(off.find("BS-NL-20").isEmpty(),
+                "BS-NL-20 must not exist unless promotions.nlLaunch.enabled is true");
+    }
+
+    /** With the launch flag on — Production — the coupon resolves. */
+    @Test
+    void theNlCouponResolvesWhenTheLaunchFlagIsOn() {
+        CouponRepository on = new CouponRepository(true);
+        Coupon coupon = on.find("BS-NL-20").orElseThrow();
+
+        assertEquals("BS-NL-20", coupon.code());
+        assertEquals(new BigDecimal("20.00"), coupon.discount());
+        assertEquals(new BigDecimal("2000"), coupon.discountMinorUnits());
+    }
+
+    @Test
+    void theNlCouponSettlesInEuro() {
+        Coupon coupon = new CouponRepository(true).find("BS-NL-20").orElseThrow();
+
+        assertEquals(Coupon.EUR, coupon.settlementCurrency());
+        assertTrue(coupon.isSepaSettled());
+    }
+
+    /** The NL coupon is restricted to the Netherlands, and to nowhere else. */
+    @Test
+    void theNlCouponIsRestrictedToTheNetherlands() {
+        Coupon coupon = new CouponRepository(true).find("BS-NL-20").orElseThrow();
+
+        assertTrue(coupon.isCountryRestricted());
+        assertTrue(coupon.isAvailableIn("NL"));
+        assertTrue(coupon.isAvailableIn("nl"), "country matching must be case-insensitive");
+        assertFalse(coupon.isAvailableIn("DE"));
+        assertFalse(coupon.isAvailableIn("FR"));
+        assertFalse(coupon.isAvailableIn(null),
+                "a restricted coupon with no country must not silently pass");
+    }
+
+    /**
+     * Same reasoning as BS-EU-20 (COUPON-551): a coupon advertised on the storefront has to be
+     * funded on every network that storefront accepts, or a shopper paying on an unfunded
+     * network is charged and then refused. Enumerates {@link CardNetwork#values()} so a new
+     * network fails here until BS-NL-20's funding for it is confirmed.
+     */
+    @Test
+    void theNlCouponIsFundedOnEveryNetworkTheStorefrontAccepts() {
+        Coupon coupon = new CouponRepository(true).find("BS-NL-20").orElseThrow();
+
+        for (CardNetwork network : CardNetwork.values()) {
+            assertTrue(coupon.fundedBy().contains(network),
+                    "BS-NL-20 is advertised on the NL storefront but is not funded on " + network);
+        }
+    }
+
+    /** The NL code must be submittable through the edge validator. */
+    @Test
+    void theNlCodeMatchesTheRequestPattern() {
+        assertTrue("BS-NL-20".matches(REQUEST_PATTERN),
+                "BS-NL-20 must be submittable through POST /v1/redemptions");
+    }
+
+    /** Turning the launch on must not disturb the rest of the catalogue. */
+    @Test
+    void enablingTheNlLaunchLeavesTheExistingCatalogueUntouched() {
+        CouponRepository on = new CouponRepository(true);
+
+        assertEquals(new BigDecimal("20.00"), on.find("BS-EU-20").orElseThrow().discount());
+        assertEquals(new BigDecimal("10.00"), on.find("NW-VISA-10").orElseThrow().discount());
+        assertFalse(on.find("BS-EU-20").orElseThrow().isCountryRestricted(),
+                "BS-EU-20 stays catalogue-wide even with the NL launch on");
     }
 }
