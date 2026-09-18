@@ -116,4 +116,19 @@ public class RedemptionController {
     public String amexNotOffered(AmexEuropeEligibility.AmexNotOfferedException e) {
         return e.getMessage();
     }
+
+    /**
+     * COUPON-610. A percentage coupon was redeemed while the percentage redemption path is
+     * switched off ({@code promotions.euPercentage.redemptionEnabled} false). The kill switch
+     * refused it before any charge; without this handler that would surface as a generic
+     * {@code 500}. Mapped to {@code 409}: the coupon exists but cannot be redeemed right now
+     * because its logic path is disabled — a temporary conflict, not a "not found". No charge was
+     * taken.
+     */
+    @ExceptionHandler(RedemptionService.PercentageRedemptionDisabledException.class)
+    @ResponseStatus(HttpStatus.CONFLICT)
+    public String percentageRedemptionDisabled(
+            RedemptionService.PercentageRedemptionDisabledException e) {
+        return e.getMessage();
+    }
 }
