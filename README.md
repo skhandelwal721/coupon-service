@@ -49,8 +49,19 @@ change does not degrade us gracefully. It stops checkout.
 
 ## Local development
 
+Java 17, matching `java.version` in [`pom.xml`](pom.xml) and the toolchain in
+[CI](.github/workflows/build.yml).
+
+Start the service:
+
 ```bash
 mvn spring-boot:run -Dspring-boot.run.profiles=local
+```
+
+Run the suite exactly as CI runs it:
+
+```bash
+mvn -B -ntp test
 ```
 
 ## Contract version
