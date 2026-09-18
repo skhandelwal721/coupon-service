@@ -15,6 +15,12 @@ import jakarta.validation.constraints.Pattern;
  * com.beaconstone.coupon.fraud.DeviceFingerprint}. The device and origin are required, because a
  * velocity check that silently falls back to "unknown" for either is a velocity check that does
  * not run.
+ *
+ * <p>{@code billingCountry} is new for COUPON-573. It is the storefront's ISO 3166-1 alpha-2
+ * country for the order, and it is the input to the country restriction on country-scoped
+ * coupons such as {@code BS-NL-20}. Optional, so the promotions backfill job and the entire
+ * unrestricted catalogue keep working unchanged — a coupon that is not country-restricted never
+ * reads it.
  */
 public record RedemptionRequest(
 
@@ -75,6 +81,19 @@ public record RedemptionRequest(
          * investigation; it is not part of the automated decision.
          */
         @Email(message = "customerEmail must be a valid email address")
-        String customerEmail
+        String customerEmail,
+
+        /**
+         * The storefront country for this order, ISO 3166-1 alpha-2 (e.g. {@code NL}).
+         *
+         * <p>New for COUPON-573. It is the input to the country restriction on country-scoped
+         * coupons. Optional: the unrestricted catalogue never reads it, so historic and
+         * backfilled redemptions that carry no country keep working. A country-restricted coupon
+         * redeemed with no {@code billingCountry} is refused — see {@code Coupon#isAvailableIn}.
+         * When present it must be two upper-case letters; validating the shape here keeps an
+         * obviously malformed value from being compared against the restriction at all.
+         */
+        @Pattern(regexp = "^[A-Z]{2}$", message = "billingCountry must be an ISO 3166-1 alpha-2 code")
+        String billingCountry
 ) {
 }

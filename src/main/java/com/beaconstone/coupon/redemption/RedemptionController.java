@@ -86,4 +86,17 @@ public class RedemptionController {
     public String unknownCoupon(RedemptionService.UnknownCouponException e) {
         return e.getMessage();
     }
+
+    /**
+     * COUPON-573. The coupon exists but is not offered in the request's country (or the country
+     * was absent for a country-restricted coupon). Surfaced as {@code 404}, the same as an
+     * unknown coupon: from this storefront's point of view the code is not on offer, and we do
+     * not want to signal that it exists on another storefront. Refused before the charge, so no
+     * money moved and no discount was booked.
+     */
+    @ExceptionHandler(RedemptionService.CouponNotAvailableInCountryException.class)
+    @ResponseStatus(HttpStatus.NOT_FOUND)
+    public String notAvailableInCountry(RedemptionService.CouponNotAvailableInCountryException e) {
+        return e.getMessage();
+    }
 }

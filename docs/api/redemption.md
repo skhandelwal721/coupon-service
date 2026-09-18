@@ -1,8 +1,26 @@
 # Redemption API
 
-**Contract version: 3.1.0.** Consumers generate or hand-write their DTO against a pinned
+**Contract version: 3.2.0.** Consumers generate or hand-write their DTO against a pinned
 version of this document — see `coupon.contract.version` in the consuming repository. Any change
 to a field's **name, type or meaning** is a major bump and has to be announced before it ships.
+
+### Changed in 3.2.0 — COUPON-573, country-scoped coupons
+
+Additive on top of 3.1.0.
+
+**Request — one new field:**
+
+| Field | Required | Purpose |
+| --- | --- | --- |
+| `billingCountry` | no | storefront country for the order, ISO 3166-1 alpha-2 (e.g. `NL`); the input to a coupon's country restriction |
+
+`billingCountry` is optional. The unrestricted catalogue never reads it, so a consumer that does
+not send it is unaffected. It is only consulted for a **country-restricted** coupon (the first is
+`BS-NL-20`, a Netherlands-only offer): such a coupon redeemed from a country it is not offered in
+— or with no `billingCountry` at all — is refused with `404` before any charge is taken. When
+present it must be two upper-case letters.
+
+**Response:** unchanged.
 
 ### Changed in 3.1.0 — COUPON-491, device and origin velocity
 
@@ -55,14 +73,15 @@ the charge, then books the discount.
 
 ```json
 {
-  "couponCode": "NW-VISA-10",
+  "couponCode": "BS-NL-20",
   "invoiceId": "inv-1001",
   "cardNumber": "4111111111111111",
-  "currency": "GBP",
-  "billingPostcode": "GB-EC2A4BX",
+  "currency": "EUR",
+  "billingPostcode": "NL-1011AB",
   "deviceId": "dev_7c2b91de",
   "customerIp": "203.0.113.7",
-  "customerEmail": "shopper@example.com"
+  "customerEmail": "shopper@example.com",
+  "billingCountry": "NL"
 }
 ```
 
@@ -71,12 +90,12 @@ the charge, then books the discount.
 ```json
 {
   "redemptionId": "rdm_1c9f4a70",
-  "couponCode": "NW-VISA-10",
+  "couponCode": "BS-NL-20",
   "chargeId": "chg_9f3b7c21",
   "fundingNetwork": "VISA",
-  "discount": "1000",
+  "discount": "2000",
   "discountUnit": "MINOR_UNITS",
-  "settlementCurrency": "GBP",
+  "settlementCurrency": "EUR",
   "customerIp": "203.0.113.7",
   "status": "REDEEMED"
 }
@@ -111,10 +130,14 @@ If a different basis is needed, add a field. Do not change what this one means.
 
 | Status | When |
 | --- | --- |
-| `404` | no such coupon |
+| `404` | no such coupon, **or** the coupon exists but is not offered in the request's `billingCountry` (a country-restricted coupon redeemed from the wrong storefront, or with no country) |
 | `409` | the coupon is not funded on the network that settled the charge |
 | `422` | the charge does not satisfy `subtotal + tax == total`, so the redemption is held |
 | `500` | `cardType` on the charge was not a card network we recognise, or the charge response carried a field our pinned contract does not declare |
+
+The country `404` is deliberately indistinguishable from an unknown coupon: from the calling
+storefront's point of view the code is simply not on offer, and we do not signal that it exists
+elsewhere. It is refused **before** the charge, so no money moves.
 
 The `422` and `500` cases both mean the upstream charge contract and our expectation of it have
 diverged. Neither has a safe default — see [`../dependencies.md`](../dependencies.md).
