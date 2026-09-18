@@ -44,8 +44,13 @@ public class CouponRepository {
             // listed Visa alone, which did not match the agreements and made the offer
             // unredeemable for a Mastercard shopper — see COUPON-551. A storefront-wide offer
             // has to be funded on every network that storefront accepts.
+            //
+            // PAY-8100: AMEX is now offered to customers in Europe, so it is a network the EUR
+            // storefronts accept. AMEX is added to the funding here to keep the COUPON-551
+            // safety property true — an offer advertised storefront-wide must be funded on every
+            // accepted network, or an AMEX shopper would be charged and then refused.
             "BS-EU-20", new Coupon("BS-EU-20", new BigDecimal("20.00"), Coupon.EUR,
-                    Set.of(CardNetwork.VISA, CardNetwork.MASTERCARD)));
+                    Set.of(CardNetwork.VISA, CardNetwork.MASTERCARD, CardNetwork.AMEX)));
 
     /**
      * The Netherlands acquisition coupon, COUPON-573. Beacon Stone prefix, EUR settlement,
@@ -62,9 +67,11 @@ public class CouponRepository {
      */
     static final String NL_COUPON_CODE = "BS-NL-20";
 
+    // PAY-8100: AMEX is offered to customers in Europe (the Netherlands included), so it is
+    // funded here alongside Visa and Mastercard — same COUPON-551 reasoning as BS-EU-20.
     private static final Coupon NL_COUPON = new Coupon(
             NL_COUPON_CODE, new BigDecimal("20.00"), Coupon.EUR,
-            Set.of(CardNetwork.VISA, CardNetwork.MASTERCARD),
+            Set.of(CardNetwork.VISA, CardNetwork.MASTERCARD, CardNetwork.AMEX),
             Set.of("NL"));
 
     private final Map<String, Coupon> coupons;

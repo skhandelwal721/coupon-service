@@ -84,3 +84,15 @@ logging:
     com.beaconstone.coupon: INFO
     # Financial crime asked for the full attempt context while the new counters bed in.
     com.beaconstone.coupon.fraud: DEBUG
+
+# --------------------------------------------------------------------------------------
+# AMEX as a European payment option — PAY-8100
+#
+# Introduces AMEX as a payment option for customers in Europe. When enabled, AMEX is offered
+# only for the European billing countries listed in AmexEuropeEligibility; a request from
+# outside that set is turned away before any charge. Default is false; set true in the
+# Production deploy to make the option live.
+# --------------------------------------------------------------------------------------
+payments:
+  amexEurope:
+    enabled: true
