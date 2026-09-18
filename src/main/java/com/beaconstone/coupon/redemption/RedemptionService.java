@@ -10,6 +10,7 @@ import com.beaconstone.coupon.promotion.CouponRepository;
 import com.beaconstone.coupon.promotion.NetworkPromotionRules;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.util.UUID;
@@ -51,16 +52,31 @@ public class RedemptionService {
     private final RedemptionAuditor auditor;
     private final PromotionLedger promotionLedger;
 
+    /**
+     * COUPON-610 kill switch for the PERCENTAGE redemption path.
+     *
+     * <p>Distinct from {@code promotions.euPercentage.enabled}, which controls whether a
+     * percentage coupon is in the <em>catalogue</em>. This flag controls whether the new
+     * FIXED-vs-PERCENTAGE branching in {@link #redeem} actually runs the percentage logic. With
+     * it off, a percentage coupon is refused <strong>before any charge</strong> rather than
+     * exercising the new pre-charge/subtotal logic — so the new logic can be disabled at runtime
+     * without a code revert, and independently of the catalogue flag. Defaults to false.
+     */
+    private final boolean percentageRedemptionEnabled;
+
     public RedemptionService(BillingClient billingClient,
                              CouponRepository couponRepository,
                              NetworkPromotionRules promotionRules,
                              RedemptionAuditor auditor,
-                             PromotionLedger promotionLedger) {
+                             PromotionLedger promotionLedger,
+                             @Value("${promotions.euPercentage.redemptionEnabled:false}")
+                             boolean percentageRedemptionEnabled) {
         this.billingClient = billingClient;
         this.couponRepository = couponRepository;
         this.promotionRules = promotionRules;
         this.auditor = auditor;
         this.promotionLedger = promotionLedger;
+        this.percentageRedemptionEnabled = percentageRedemptionEnabled;
     }
 
     public RedemptionReceipt redeem(RedemptionRequest request) {
@@ -73,6 +89,15 @@ public class RedemptionService {
         // pass this unconditionally, so the existing catalogue is unaffected.
         if (!coupon.isAvailableIn(request.billingCountry())) {
             throw new CouponNotAvailableInCountryException(coupon.code(), request.billingCountry());
+        }
+
+        // COUPON-610 kill switch: the FIXED-vs-PERCENTAGE branching below is new logic. It only
+        // runs the percentage path when percentageRedemptionEnabled is on. When it is off, a
+        // percentage coupon is refused HERE — before any charge — so the new pre-charge/subtotal
+        // logic is never exercised without the switch, and it can be turned off at runtime
+        // without a code revert. FIXED coupons are unaffected by this gate.
+        if (coupon.discountType() == Coupon.DiscountType.PERCENTAGE && !percentageRedemptionEnabled) {
+            throw new PercentageRedemptionDisabledException(coupon.code());
         }
 
         // COUPON-530: send the promotional deduction with the charge. billing-service applies
@@ -143,6 +168,17 @@ public class RedemptionService {
     public static class PromotionNotFundedException extends RuntimeException {
         public PromotionNotFundedException(String message) {
             super(message);
+        }
+    }
+
+    /**
+     * COUPON-610. A percentage coupon was redeemed while the percentage redemption path is
+     * disabled ({@code promotions.euPercentage.redemptionEnabled} off). Thrown before any charge
+     * — the kill switch stops the new logic before money moves.
+     */
+    public static class PercentageRedemptionDisabledException extends RuntimeException {
+        public PercentageRedemptionDisabledException(String code) {
+            super("percentage redemption is disabled; coupon " + code + " cannot be redeemed");
         }
     }
 
