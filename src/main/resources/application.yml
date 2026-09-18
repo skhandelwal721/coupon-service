@@ -49,6 +49,22 @@ settlement:
     amountRepresentation: MINOR_UNITS
     structuredAddress: true
 
+# --------------------------------------------------------------------------------------
+# Promotions launch flags — COUPON-573
+#
+# nlLaunch gates the Netherlands-only BS-NL-20 coupon. The catalogue registers the code only
+# when this is true (see CouponRepository), so when it is false the code cannot be resolved,
+# redeemed, or charged against — it does not exist.
+#
+# This default is false. It is set to true in the PRODUCTION deploy only: the change to enable
+# BS-NL-20 for Netherlands customers is a production-only change, and lower environments keep
+# the coupon off. Flip this back to false to withdraw the coupon without a code revert — see
+# docs/runbooks/redemption.md, "Netherlands launch (BS-NL-20)".
+# --------------------------------------------------------------------------------------
+promotions:
+  nlLaunch:
+    enabled: true
+
 analytics:
   redemptionEndpoint: https://analytics.beaconstone.example/v1/events/redemption
 

@@ -88,3 +88,72 @@ start charging it.
 Doing it the other way round means we take charges on a network we cannot attribute, and
 `NetworkPromotionRulesTest.everyKnownNetworkResolvesToAFundingNetwork` is what stops that
 shipping quietly from our side.
+
+## Netherlands launch (BS-NL-20) — COUPON-573
+
+`BS-NL-20` is a Netherlands-only Beacon Stone coupon: €20 off, EUR/SEPA settlement, funded on
+every network the storefront accepts. Two things make it different from the rest of the
+catalogue, and both matter on call:
+
+- **It is country-restricted.** It may only be redeemed from `NL`. The check is in
+  `RedemptionService`, reads `billingCountry` off the request, and runs **before** the charge —
+  a shopper on any other storefront is refused with `404` and *no card charge is taken*. A
+  restricted coupon submitted with no `billingCountry` is refused too.
+- **It is gated on a flag.** The catalogue only registers the code when
+  `promotions.nlLaunch.enabled` is `true`. That flag is set true **in Production only**; every
+  lower environment leaves it false, so the code does not exist there at all. This is why the
+  change is described as production-only: the code lands everywhere, but the coupon is only
+  *live* where the flag is on.
+
+### Test plan
+
+Ordered cheapest-first. The first three run in CI on every build; the last two are the
+Production smoke.
+
+1. **Unit — model.** `CouponCountryRestrictionTest` proves `isAvailableIn` is case-insensitive,
+   refuses other countries, and refuses a restricted coupon with no country. Unrestricted
+   coupons stay available everywhere.
+2. **Unit — catalogue and flag.** `CouponRepositoryTest`:
+   - `theNlCouponIsAbsentWhenTheLaunchFlagIsOff` — flag off ⇒ `find("BS-NL-20")` is empty.
+   - `theNlCouponResolvesWhenTheLaunchFlagIsOn` / `theNlCouponIsRestrictedToTheNetherlands` /
+     `theNlCouponIsFundedOnEveryNetworkTheStorefrontAccepts` — flag on ⇒ resolves, NL-only,
+     funded on every `CardNetwork`.
+   - `theExistingCatalogueIsNotCountryRestricted` and
+     `enablingTheNlLaunchLeavesTheExistingCatalogueUntouched` — nothing else changed.
+3. **Edge validation.** `BS-NL-20` matches `RedemptionRequest`'s pattern
+   (`theNlCodeMatchesTheRequestPattern`); a malformed `billingCountry` is rejected by the
+   `^[A-Z]{2}$` constraint before it reaches the service.
+4. **Production smoke — happy path.** With the flag on in Production, `POST /v1/redemptions`
+   for `BS-NL-20` with `billingCountry: NL` and an EUR invoice on a funded network returns
+   `201` and books a €20 (`2000` minor units) discount. Confirm one row in the promotion ledger
+   and one attribution event.
+5. **Production smoke — the guard rails.** Same request with `billingCountry: DE` (or omitted)
+   returns `404` and — critically — **billing-service shows no charge for that invoice**. This
+   is the assertion that matters: the refusal happens before money moves.
+
+### Rollback plan
+
+The change has two independent levers, and the fast one does not need a deploy.
+
+1. **First lever — the flag.** Set `promotions.nlLaunch.enabled: false` in Production and
+   restart/redeploy config. The coupon leaves the catalogue immediately: further redemptions of
+   `BS-NL-20` return `404`, exactly as if it never launched. **This is the withdraw switch —
+   use it first.** No code revert is needed to stop the offer.
+2. **Second lever — revert the code.** If the country gate or the model change itself is
+   implicated, revert this PR and redeploy. The change is additive (new field defaulting to
+   unrestricted, new flag defaulting to off, new coupon behind it), so a revert returns the
+   service exactly to its pre-COUPON-573 behaviour.
+
+**What a rollback does not undo** — the same as everywhere else in this runbook, and worth being
+blunt about:
+
+| Already happened | What withdrawing / reverting does |
+| --- | --- |
+| a `BS-NL-20` redemption was booked while it was live | nothing — the discount rows are already in the promotion ledger at €20 each, and finance invoices the networks off them |
+| a charge was taken for one of those redemptions | nothing — charges are irreversible once taken |
+| an attribution export for that window went to finance | nothing — it has already been reconciled against |
+
+So the window that matters is *how long BS-NL-20 was live*, not how fast the flag flips. If it
+ran hot, work the volume from the table above and assume every `BS-NL-20` redemption in the live
+window needs reconstructing by hand. Because the flag makes withdrawal instant, the correct
+first move on any doubt is: **flip the flag off, then investigate.**
