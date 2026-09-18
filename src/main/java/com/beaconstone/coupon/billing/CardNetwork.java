@@ -15,7 +15,8 @@ package com.beaconstone.coupon.billing;
 public enum CardNetwork {
 
     VISA,
-    MASTERCARD;
+    MASTERCARD,
+    AMEX;
 
     /**
      * Resolves the network from the {@code cardType} field of a billing-service charge
@@ -29,6 +30,7 @@ public enum CardNetwork {
      * @throws IllegalArgumentException if {@code cardType} is not a network we know
      */
     public static CardNetwork fromChargeResponse(String cardType) {
-        return valueOf(cardType);
+        // Normalise and resolve card network for European AMEX card transactions
+        return valueOf(cardType.trim().toUpperCase());
     }
 }
