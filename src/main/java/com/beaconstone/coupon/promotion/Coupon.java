@@ -150,6 +150,22 @@ public record Coupon(
     /**
      * The FIXED discount as an integral number of minor units.
      *
+    }
+
+    /**
+     * Factory for a PERCENTAGE coupon — COUPON-610.
+     *
+     * @param percentageBps the rate in basis points (2000 = 20%).
+     */
+    public static Coupon percentage(String code, int percentageBps, String settlementCurrency,
+                                    Set<CardNetwork> fundedBy, Set<String> eligibleCountries) {
+        return new Coupon(code, BigDecimal.ZERO, settlementCurrency, fundedBy,
+                eligibleCountries, DiscountType.PERCENTAGE, percentageBps);
+    }
+
+    /**
+     * The FIXED discount as an integral number of minor units.
+     *
      * <p>Applies to FIXED coupons; for a PERCENTAGE coupon the amount depends on the order, so
      * callers must use {@link #discountMinorUnitsFor(BigDecimal)} instead. Kept for the entire
      * existing (FIXED) catalogue and existing call sites.
@@ -185,6 +201,24 @@ public record Coupon(
         return subtotalMinorUnits
                 .multiply(BigDecimal.valueOf(percentageBps))
                 .divide(BPS_PER_WHOLE, 0, DISCOUNT_ROUNDING);
+    }
+
+    /**
+     * The discount as an integral number of minor units, given the charge {@code subtotal} in
+     * minor units.
+     *
+     * <p>For a FIXED coupon this is the fixed amount and {@code subtotal} is ignored, so callers
+     * can use this one method for either type. For a PERCENTAGE coupon it is
+     * {@code subtotal * percentageBps / 10000}, truncated down for the same reason as above —
+     * we never instruct more promotional spend than the rate agrees.
+     */
+    public BigDecimal discountMinorUnitsFor(BigDecimal subtotalMinorUnits) {
+        if (discountType == DiscountType.FIXED) {
+            return discountMinorUnits();
+        }
+        return subtotalMinorUnits
+                .multiply(BigDecimal.valueOf(percentageBps))
+                .divide(BPS_PER_WHOLE, 0, RoundingMode.DOWN);
     }
 
     /** True for a promotion that settles through SEPA rather than Bacs/FPS. */
