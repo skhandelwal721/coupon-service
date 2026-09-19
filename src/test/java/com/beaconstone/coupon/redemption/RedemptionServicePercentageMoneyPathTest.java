@@ -104,7 +104,7 @@ class RedemptionServicePercentageMoneyPathTest {
         PromotionLedger ledger = new PromotionLedger();
         RedemptionService service = new RedemptionService(
                 billing, repoWith(euPercentageCoupon()), new NetworkPromotionRules(),
-                new RedemptionAuditor(), ledger);
+                new RedemptionAuditor(), ledger, /* percentageRedemptionEnabled */ true);
 
         RedemptionReceipt receipt = service.redeem(euRequest());
 
@@ -132,7 +132,7 @@ class RedemptionServicePercentageMoneyPathTest {
         PromotionLedger ledger = new PromotionLedger();
         RedemptionService service = new RedemptionService(
                 billing, repoWith(euPercentageCoupon()), new NetworkPromotionRules(),
-                new RedemptionAuditor(), ledger);
+                new RedemptionAuditor(), ledger, /* percentageRedemptionEnabled */ true);
 
         assertThrows(RedemptionService.DiscountNotAppliedToChargeException.class,
                 () -> service.redeem(euRequest()),
