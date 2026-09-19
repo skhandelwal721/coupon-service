@@ -92,4 +92,54 @@ public class BillingClient {
                 "wp_4f8a21c7",
                 "CHARGED");
     }
+
+    /**
+     * COUPON-610 fix: applies a promotional deduction to an already-established charge and
+     * returns billing-service's re-settled view of it.
+     *
+     * <p>A FIXED coupon's deduction is a constant known before the charge, so it rides on the
+     * single {@link #charge} call as {@code promotionalAdjustment}. A PERCENTAGE coupon's
+     * deduction is a function of the subtotal that only the charge establishes, so it cannot be
+     * sent on the first call. Before this method existed the percentage was computed after the
+     * charge and booked to the ledger but <strong>never applied to the card</strong>: the
+     * customer was charged the full subtotal while the ledger recorded a discount, so every
+     * percentage redemption drifted the ledger from the money that actually moved.
+     *
+     * <p>This is the second leg of the two-phase apply. billing-service exposes
+     * {@code POST /v1/charges/{chargeId}/adjustments}; we send {@code discountMinorUnits} and it
+     * re-settles the same charge at {@code subtotal - discount}, keeping one statement line and
+     * one interchange fee — the single-transaction model COUPON-530 established. The returned
+     * view reflects the reduced {@code subtotal} and {@code total}, which is what the caller
+     * reconciles the ledger against.
+     */
+    public BillingChargeView applyPromotionalDiscount(BillingChargeView charge,
+                                                      BigDecimal discountMinorUnits) {
+        BigDecimal discountMajorUnits = discountMinorUnits
+                .movePointLeft(2)
+                .setScale(2, java.math.RoundingMode.UNNECESSARY);
+
+        String adjustmentUrl = baseUrl + "/v1/charges/" + charge.chargeId() + "/adjustments";
+
+        log.info("applying promotional discount to settled charge chargeId={} url={} "
+                        + "discountMinorUnits={} discountMajorUnits={}",
+                charge.chargeId(), adjustmentUrl, discountMinorUnits, discountMajorUnits);
+
+        // Stubbed for the fixture: the real client POSTs { discountMinorUnits } to the
+        // adjustments path and deserializes the re-settled charge into BillingChargeView with
+        // the same strict ObjectMapper. Here we mirror billing-service's arithmetic: the
+        // deduction comes off the subtotal, and total follows as subtotal - discount + tax.
+        BigDecimal reducedSubtotal = charge.subtotal().subtract(discountMajorUnits);
+        BigDecimal reducedTotal = reducedSubtotal.add(charge.tax());
+
+        return new BillingChargeView(
+                charge.chargeId(),
+                charge.invoiceId(),
+                reducedSubtotal,
+                charge.tax(),
+                reducedTotal,
+                charge.currency(),
+                charge.cardType(),
+                charge.acquirerReference(),
+                charge.status());
+    }
 }
