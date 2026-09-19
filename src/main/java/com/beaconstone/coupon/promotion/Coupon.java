@@ -28,14 +28,30 @@ import java.util.stream.Collectors;
  * addition is additive and the existing catalogue is untouched. A non-empty set restricts the
  * coupon to those countries; see {@link #isAvailableIn(String)} and the country gate in
  * {@code RedemptionService}. Country matching is case-insensitive and codes are held upper-case.
+ *
+ * <p>{@code discountType} and {@code percentageBps} are new for COUPON-610. A {@code FIXED}
+ * coupon takes an absolute amount off, which is what every coupon in the catalogue does today and
+ * is the value the existing constructors produce. A {@code PERCENTAGE} coupon expresses its
+ * discount as a rate in basis points instead, and its amount is computed from a subtotal supplied
+ * by the caller rather than held on the record — see {@link #discountMinorUnitsFor(BigDecimal)}.
  */
 public record Coupon(
         String code,
         BigDecimal discount,
         String settlementCurrency,
         Set<CardNetwork> fundedBy,
-        Set<String> eligibleCountries
+        Set<String> eligibleCountries,
+        DiscountType discountType,
+        int percentageBps
 ) {
+
+    /** How a coupon's discount is expressed. */
+    public enum DiscountType {
+        /** An absolute amount ({@code discount}), independent of the subtotal. The default. */
+        FIXED,
+        /** A rate ({@code percentageBps}) applied to a subtotal. New for COUPON-610. */
+        PERCENTAGE
+    }
 
     /** The settlement currency for the sterling catalogue, and the default. */
     public static final String GBP = "GBP";
@@ -45,6 +61,9 @@ public record Coupon(
 
     /** Minor units per major unit. Both GBP and EUR are two-decimal currencies. */
     private static final BigDecimal MINOR_UNITS_PER_MAJOR = new BigDecimal("100");
+
+    /** Basis points in a whole. 2000 bps = 20%. */
+    private static final BigDecimal BPS_PER_WHOLE = new BigDecimal("10000");
 
     /**
      * Canonicalises {@code eligibleCountries} to upper-case so the restriction is matched
@@ -57,6 +76,15 @@ public record Coupon(
                 : eligibleCountries.stream()
                         .map(c -> c.toUpperCase(Locale.ROOT))
                         .collect(Collectors.toUnmodifiableSet());
+
+        if (discountType == null) {
+            discountType = DiscountType.FIXED;
+        }
+        if (discountType == DiscountType.PERCENTAGE
+                && (percentageBps <= 0 || percentageBps > 10000)) {
+            throw new IllegalArgumentException(
+                    "percentageBps must be within (0, 10000] for a PERCENTAGE coupon: " + percentageBps);
+        }
     }
 
     /**
@@ -67,7 +95,7 @@ public record Coupon(
      * keeps compiling and keeps meaning exactly what it meant — GBP settlement, unrestricted.
      */
     public Coupon(String code, BigDecimal discount, Set<CardNetwork> fundedBy) {
-        this(code, discount, GBP, fundedBy, Set.of());
+        this(code, discount, GBP, fundedBy, Set.of(), DiscountType.FIXED, 0);
     }
 
     /**
@@ -78,7 +106,50 @@ public record Coupon(
      */
     public Coupon(String code, BigDecimal discount, String settlementCurrency,
                   Set<CardNetwork> fundedBy) {
-        this(code, discount, settlementCurrency, fundedBy, Set.of());
+        this(code, discount, settlementCurrency, fundedBy, Set.of(), DiscountType.FIXED, 0);
+    }
+
+    /**
+     * Back-compatible form for the country-restricted entries added in COUPON-573, which predate
+     * {@code discountType}. FIXED, so those entries keep the amount and behaviour they have today.
+     */
+    public Coupon(String code, BigDecimal discount, String settlementCurrency,
+                  Set<CardNetwork> fundedBy, Set<String> eligibleCountries) {
+        this(code, discount, settlementCurrency, fundedBy, eligibleCountries, DiscountType.FIXED, 0);
+    }
+
+    /**
+     * Builds a PERCENTAGE coupon at {@code percentageBps} basis points (2000 = 20%).
+     *
+     * <p>{@code discount} is zero for this form, because the amount is not a property of the
+     * coupon: it is computed per call by {@link #discountMinorUnitsFor(BigDecimal)}.
+     */
+    public static Coupon percentage(String code, int percentageBps, String settlementCurrency,
+                                    Set<CardNetwork> fundedBy, Set<String> eligibleCountries) {
+        return new Coupon(code, BigDecimal.ZERO, settlementCurrency, fundedBy,
+                eligibleCountries, DiscountType.PERCENTAGE, percentageBps);
+    }
+
+    /**
+     * The amount for this coupon as an integral number of minor units, given a subtotal in minor
+     * units.
+     *
+     * <p>A {@code FIXED} coupon ignores {@code subtotalMinorUnits} and returns exactly what
+     * {@link #discountMinorUnits()} returns, so a caller can use this one method for either type
+     * and the existing catalogue behaves identically through it.
+     *
+     * <p>A {@code PERCENTAGE} coupon returns {@code subtotal * percentageBps / 10000}. The
+     * division truncates with {@link RoundingMode#DOWN}, matching the truncation
+     * {@link #discountMinorUnits()} has always applied, so both types round the same way and a
+     * fraction of a minor unit is never carried.
+     */
+    public BigDecimal discountMinorUnitsFor(BigDecimal subtotalMinorUnits) {
+        if (discountType == DiscountType.FIXED) {
+            return discountMinorUnits();
+        }
+        return subtotalMinorUnits
+                .multiply(BigDecimal.valueOf(percentageBps))
+                .divide(BPS_PER_WHOLE, 0, RoundingMode.DOWN);
     }
 
     /**
@@ -94,6 +165,13 @@ public record Coupon(
      * up would instruct more promotional spend than was agreed.
      */
     public BigDecimal discountMinorUnits() {
+        if (discountType == DiscountType.PERCENTAGE) {
+            // A PERCENTAGE coupon holds discount == ZERO, so without this the method would
+            // quietly answer 0 for a coupon that has a perfectly good amount, just not one that
+            // can be known without a subtotal. Fail loudly instead of returning a wrong figure.
+            throw new IllegalStateException(
+                    "coupon " + code + " is PERCENTAGE; use discountMinorUnitsFor(subtotal)");
+        }
         return discount
                 .multiply(MINOR_UNITS_PER_MAJOR)
                 .setScale(0, RoundingMode.DOWN);
