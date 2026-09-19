@@ -11,10 +11,7 @@ import java.util.stream.Collectors;
 /**
  * A promotional coupon.
  *
- * <p>{@code discount} is the absolute amount taken off, in {@code settlementCurrency}, for a
- * {@link DiscountType#FIXED} coupon. For a {@link DiscountType#PERCENTAGE} coupon it is unused
- * and the discount is derived from {@code percentageBps} against the charge subtotal — see
- * {@link #discountMinorUnitsFor(BigDecimal)}.
+ * <p>{@code discount} is the absolute amount taken off, in {@code settlementCurrency}.
  *
  * <p>{@code settlementCurrency} is new for COUPON-490. Sterling promotions keep {@code GBP};
  * the SEPA catalogue carries {@code EUR}. Existing coupons are constructed through the
@@ -26,32 +23,19 @@ import java.util.stream.Collectors;
  * why {@link NetworkPromotionRules} refuses rather than defaulting.
  *
  * <p>{@code eligibleCountries} is new for COUPON-573. It is the set of ISO 3166-1 alpha-2
- * country codes a coupon may be redeemed from. An <strong>empty</strong> set means unrestricted.
- *
- * <p>{@code discountType} and {@code percentageBps} are new for COUPON-610, which introduces
- * percentage discounting to the catalogue for the first time. Every coupon that predates this
- * change is {@link DiscountType#FIXED} — an absolute amount, exactly as before — so the addition
- * is additive and the existing catalogue is unchanged. A {@link DiscountType#PERCENTAGE} coupon
- * carries its rate in {@code percentageBps} (basis points; 2000 = 20%) and its discount is a
- * function of the charge subtotal, not a constant.
+ * country codes a coupon may be redeemed from. An <strong>empty</strong> set means
+ * unrestricted — the catalogue-wide behaviour every coupon had before this change — so the
+ * addition is additive and the existing catalogue is untouched. A non-empty set restricts the
+ * coupon to those countries; see {@link #isAvailableIn(String)} and the country gate in
+ * {@code RedemptionService}. Country matching is case-insensitive and codes are held upper-case.
  */
 public record Coupon(
         String code,
         BigDecimal discount,
         String settlementCurrency,
         Set<CardNetwork> fundedBy,
-        Set<String> eligibleCountries,
-        DiscountType discountType,
-        int percentageBps
+        Set<String> eligibleCountries
 ) {
-
-    /** How a coupon's discount is computed. */
-    public enum DiscountType {
-        /** An absolute amount ({@code discount}) off, independent of the order. The original and default. */
-        FIXED,
-        /** A percentage ({@code percentageBps}) off the charge subtotal. New for COUPON-610. */
-        PERCENTAGE
-    }
 
     /** The settlement currency for the sterling catalogue, and the default. */
     public static final String GBP = "GBP";
@@ -62,11 +46,10 @@ public record Coupon(
     /** Minor units per major unit. Both GBP and EUR are two-decimal currencies. */
     private static final BigDecimal MINOR_UNITS_PER_MAJOR = new BigDecimal("100");
 
-    /** Basis points in a whole (100%). 2000 bps = 20%. */
-    private static final BigDecimal BPS_PER_WHOLE = new BigDecimal("10000");
-
     /**
-     * Canonicalises {@code eligibleCountries} to upper-case and validates the discount shape.
+     * Canonicalises {@code eligibleCountries} to upper-case so the restriction is matched
+     * case-insensitively regardless of what the storefront submits or the catalogue declares.
+     * A {@code null} set is treated as unrestricted.
      */
     public Coupon {
         eligibleCountries = eligibleCountries == null
@@ -74,91 +57,46 @@ public record Coupon(
                 : eligibleCountries.stream()
                         .map(c -> c.toUpperCase(Locale.ROOT))
                         .collect(Collectors.toUnmodifiableSet());
-
-        if (discountType == null) {
-            discountType = DiscountType.FIXED;
-        }
-        if (discountType == DiscountType.PERCENTAGE) {
-            if (percentageBps <= 0 || percentageBps > 10000) {
-                throw new IllegalArgumentException(
-                        "percentageBps must be within (0, 10000] for a PERCENTAGE coupon: " + percentageBps);
-            }
-        }
     }
 
     /**
      * Back-compatible form, for the sterling catalogue and for call sites that predate
-     * {@code settlementCurrency}. FIXED, GBP settlement, unrestricted.
+     * {@code settlementCurrency}.
+     *
+     * <p>Retained so this change stays <strong>additive</strong>: every existing construction
+     * keeps compiling and keeps meaning exactly what it meant — GBP settlement, unrestricted.
      */
     public Coupon(String code, BigDecimal discount, Set<CardNetwork> fundedBy) {
-        this(code, discount, GBP, fundedBy, Set.of(), DiscountType.FIXED, 0);
+        this(code, discount, GBP, fundedBy, Set.of());
     }
 
     /**
      * Back-compatible form for the SEPA catalogue, which predates {@code eligibleCountries}.
-     * FIXED, unrestricted.
+     *
+     * <p>Retained for the same reason as the sterling form above: the euro entries added in
+     * COUPON-490/550 keep constructing and keep being catalogue-wide (unrestricted).
      */
     public Coupon(String code, BigDecimal discount, String settlementCurrency,
                   Set<CardNetwork> fundedBy) {
-        this(code, discount, settlementCurrency, fundedBy, Set.of(), DiscountType.FIXED, 0);
+        this(code, discount, settlementCurrency, fundedBy, Set.of());
     }
 
     /**
-     * Back-compatible form for country-restricted FIXED coupons (COUPON-573), which predate the
-     * discount-type field. FIXED.
-     */
-    public Coupon(String code, BigDecimal discount, String settlementCurrency,
-                  Set<CardNetwork> fundedBy, Set<String> eligibleCountries) {
-        this(code, discount, settlementCurrency, fundedBy, eligibleCountries, DiscountType.FIXED, 0);
-    }
-
-    /**
-     * Factory for a PERCENTAGE coupon — COUPON-610.
+     * The discount as an integral number of minor units.
      *
-     * @param percentageBps the rate in basis points (2000 = 20%).
-     */
-    public static Coupon percentage(String code, int percentageBps, String settlementCurrency,
-                                    Set<CardNetwork> fundedBy, Set<String> eligibleCountries) {
-        return new Coupon(code, BigDecimal.ZERO, settlementCurrency, fundedBy,
-                eligibleCountries, DiscountType.PERCENTAGE, percentageBps);
-    }
-
-    /**
-     * The FIXED discount as an integral number of minor units.
-     *
-     * <p>Applies to FIXED coupons; for a PERCENTAGE coupon the amount depends on the order, so
-     * callers must use {@link #discountMinorUnitsFor(BigDecimal)} instead. Kept for the entire
-     * existing (FIXED) catalogue and existing call sites.
+     * <p>SEPA instructions carry amounts as integral minor units (ISO 20022
+     * {@code InstdAmt} is expressed in the currency's smallest denomination), so a euro
+     * promotion of &euro;24.90 settles as {@code 2490}. Sterling is expressed the same way for
+     * consistency, because a single settlement pipeline handling two representations of the same
+     * figure is how reconciliation breaks.
      *
      * <p>Truncates rather than rounds: a fraction of a cent cannot be instructed, and rounding
      * up would instruct more promotional spend than was agreed.
      */
     public BigDecimal discountMinorUnits() {
-        if (discountType == DiscountType.PERCENTAGE) {
-            throw new IllegalStateException(
-                    "coupon " + code + " is PERCENTAGE; use discountMinorUnitsFor(subtotal)");
-        }
         return discount
                 .multiply(MINOR_UNITS_PER_MAJOR)
                 .setScale(0, RoundingMode.DOWN);
-    }
-
-    /**
-     * The discount as an integral number of minor units, given the charge {@code subtotal} in
-     * minor units.
-     *
-     * <p>For a FIXED coupon this is the fixed amount and {@code subtotal} is ignored, so callers
-     * can use this one method for either type. For a PERCENTAGE coupon it is
-     * {@code subtotal * percentageBps / 10000}, truncated down for the same reason as above —
-     * we never instruct more promotional spend than the rate agrees.
-     */
-    public BigDecimal discountMinorUnitsFor(BigDecimal subtotalMinorUnits) {
-        if (discountType == DiscountType.FIXED) {
-            return discountMinorUnits();
-        }
-        return subtotalMinorUnits
-                .multiply(BigDecimal.valueOf(percentageBps))
-                .divide(BPS_PER_WHOLE, 0, RoundingMode.DOWN);
     }
 
     /** True for a promotion that settles through SEPA rather than Bacs/FPS. */
@@ -174,9 +112,11 @@ public record Coupon(
     /**
      * Whether this coupon may be redeemed from {@code country} (ISO 3166-1 alpha-2).
      *
-     * <p>An unrestricted coupon is available everywhere; a restricted coupon needs a country to
-     * match, and a {@code null}/blank country against a restricted coupon is not eligible.
-     * Matching is case-insensitive.
+     * <p>An unrestricted coupon ({@link #isCountryRestricted()} false) is available everywhere,
+     * so a missing {@code country} is fine for it. A restricted coupon needs a country to match:
+     * a {@code null} or blank {@code country} against a restricted coupon is <em>not</em>
+     * eligible, because a restriction that silently passes when the input is absent is not a
+     * restriction. Matching is case-insensitive.
      */
     public boolean isAvailableIn(String country) {
         if (!isCountryRestricted()) {

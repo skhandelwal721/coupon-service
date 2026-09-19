@@ -79,20 +79,9 @@ public class RedemptionService {
         // it to the invoice subtotal, so a discounted order is one card transaction instead of
         // a full charge followed by a refund for the difference — one statement line, one
         // interchange fee.
-        //
-        // COUPON-610: a FIXED coupon's deduction is a constant known before the charge, so it is
-        // sent as today. A PERCENTAGE coupon's deduction is a function of the subtotal, which
-        // only billing-service knows authoritatively; we send a zero pre-adjustment so the charge
-        // establishes the true subtotal, then compute the percentage from that subtotal below.
-        // This keeps the single-transaction model for FIXED unchanged and derives the percentage
-        // from the same subtotal that reconciliation uses.
-        java.math.BigDecimal preChargeAdjustment = coupon.discountType() == Coupon.DiscountType.FIXED
-                ? coupon.discountMinorUnits()
-                : java.math.BigDecimal.ZERO;
-
         BillingChargeView charge = billingClient.charge(
                 request.invoiceId(), request.cardNumber(), request.currency(),
-                request.billingPostcode(), preChargeAdjustment);
+                request.billingPostcode(), coupon.discountMinorUnits());
 
         auditor.requireAccountable(charge);
 
@@ -105,13 +94,7 @@ public class RedemptionService {
         String redemptionId = "rdm_" + UUID.randomUUID();
 
         // Minor units, so one settlement pipeline covers Bacs/FPS and SEPA. See Coupon.
-        // FIXED returns its constant amount; PERCENTAGE is computed against the charge subtotal
-        // (in minor units) that billing-service returned, so the booked discount matches what
-        // reconciliation will see.
-        java.math.BigDecimal subtotalMinorUnits = charge.subtotal()
-                .multiply(new java.math.BigDecimal("100"))
-                .setScale(0, java.math.RoundingMode.DOWN);
-        java.math.BigDecimal discountMinorUnits = coupon.discountMinorUnitsFor(subtotalMinorUnits);
+        java.math.BigDecimal discountMinorUnits = coupon.discountMinorUnits();
 
         log.info("redeemed redemptionId={} couponCode={} chargeId={} network={} currency={} "
                         + "discountMinorUnits={} sepaSettled={}",
