@@ -82,20 +82,6 @@ public class RedemptionController {
         return e.getMessage();
     }
 
-    /**
-     * COUPON-610 fix. The discount that would have been booked to the ledger did not match the
-     * amount actually taken off the card, so the redemption was held before the ledger was
-     * touched. Surfaced as {@code 500}: this is an internal money-path invariant failing, not a
-     * customer input problem, and it means billing-service did not settle the discount we
-     * computed. The customer sees checkout fail rather than a "discount applied" message against
-     * a card that was charged in full.
-     */
-    @ExceptionHandler(RedemptionService.DiscountNotAppliedToChargeException.class)
-    @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
-    public String discountNotApplied(RedemptionService.DiscountNotAppliedToChargeException e) {
-        return e.getMessage();
-    }
-
     @ExceptionHandler(RedemptionService.UnknownCouponException.class)
     @ResponseStatus(HttpStatus.NOT_FOUND)
     public String unknownCoupon(RedemptionService.UnknownCouponException e) {
@@ -128,21 +114,6 @@ public class RedemptionController {
     @ExceptionHandler(AmexEuropeEligibility.AmexNotOfferedException.class)
     @ResponseStatus(HttpStatus.NOT_FOUND)
     public String amexNotOffered(AmexEuropeEligibility.AmexNotOfferedException e) {
-        return e.getMessage();
-    }
-
-    /**
-     * COUPON-610. A percentage coupon was redeemed while the percentage redemption path is
-     * switched off ({@code promotions.euPercentage.redemptionEnabled} false). The kill switch
-     * refused it before any charge; without this handler that would surface as a generic
-     * {@code 500}. Mapped to {@code 409}: the coupon exists but cannot be redeemed right now
-     * because its logic path is disabled — a temporary conflict, not a "not found". No charge was
-     * taken.
-     */
-    @ExceptionHandler(RedemptionService.PercentageRedemptionDisabledException.class)
-    @ResponseStatus(HttpStatus.CONFLICT)
-    public String percentageRedemptionDisabled(
-            RedemptionService.PercentageRedemptionDisabledException e) {
         return e.getMessage();
     }
 }
