@@ -64,11 +64,6 @@ settlement:
 promotions:
   nlLaunch:
     enabled: true
-  # COUPON-610: euPercentage gates BS-EUP-20, the first percentage discount in the catalogue
-  # (20% off, EU-wide, EUR). The catalogue registers the code only when this is true; when false
-  # it cannot be resolved or redeemed. Default false; set true in the PRODUCTION deploy only.
-  euPercentage:
-    enabled: true
 
 analytics:
   redemptionEndpoint: https://analytics.beaconstone.example/v1/events/redemption
