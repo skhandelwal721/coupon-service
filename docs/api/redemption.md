@@ -4,7 +4,7 @@
 version of this document — see `coupon.contract.version` in the consuming repository. Any change
 to a field's **name, type or meaning** is a major bump and has to be announced before it ships.
 
-### Changed in 3.3.0 — COUPON-620, correlation id passthrough
+### Changed in 3.3.0 — COUPON-625, correlation id passthrough
 
 Additive on top of 3.2.0. **No field is added, removed or changed** — request and response
 bodies are byte-for-byte what they were in 3.2.0.

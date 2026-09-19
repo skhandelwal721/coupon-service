@@ -17,7 +17,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * COUPON-620. The correlation id travels to billing-service, and its absence changes nothing.
+ * COUPON-625. The correlation id travels to billing-service, and its absence changes nothing.
  *
  * <p>The client is stubbed for the fixture, so what is assertable here is that the id reaches the
  * call and that the charge the caller gets back is identical either way. The header name itself

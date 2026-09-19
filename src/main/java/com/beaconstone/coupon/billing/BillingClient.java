@@ -53,7 +53,7 @@ public class BillingClient {
     }
 
     /**
-     * The header the caller's correlation id travels on — COUPON-620.
+     * The header the caller's correlation id travels on — COUPON-625.
      *
      * <p>Public and defined once: the entrypoint reads the header by this name and this client
      * sends it on by the same name, so the two cannot drift apart.
@@ -66,7 +66,7 @@ public class BillingClient {
      * <p>The response is deserialized into {@link BillingChargeView}, which is strict. A
      * response carrying a field our pinned contract version does not declare fails here.
      *
-     * <p>Form without a correlation id, retained for call sites that predate COUPON-620 —
+     * <p>Form without a correlation id, retained for call sites that predate COUPON-625 —
      * including the promotions backfill job. Behaves exactly as before.
      */
     public BillingChargeView charge(String invoiceId, String cardNumber, String currency,
@@ -76,7 +76,7 @@ public class BillingClient {
     }
 
     /**
-     * As above, propagating the caller's correlation id to billing-service — COUPON-620.
+     * As above, propagating the caller's correlation id to billing-service — COUPON-625.
      *
      * <p>{@code correlationId} is sent as the {@code X-Beacon-Correlation-Id} <strong>request
      * header</strong>, not on the body. That is deliberate: the charge request body is validated

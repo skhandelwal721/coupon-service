@@ -41,7 +41,7 @@ public class RedemptionController {
     }
 
     /**
-     * @param correlationId optional, from {@code X-Beacon-Correlation-Id} — COUPON-620. The
+     * @param correlationId optional, from {@code X-Beacon-Correlation-Id} — COUPON-625. The
      *                      caller's own identifier for the request, propagated to
      *                      {@code billing-service} so one redemption can be followed across
      *                      {@code order-service}, here and the charge. Read by nothing on this

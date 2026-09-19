@@ -80,7 +80,7 @@ public class RedemptionService {
     }
 
     /**
-     * Form without a correlation id, retained for call sites that predate COUPON-620 —
+     * Form without a correlation id, retained for call sites that predate COUPON-625 —
      * including the promotions backfill job. Behaves exactly as before.
      */
     public RedemptionReceipt redeem(RedemptionRequest request) {
@@ -88,7 +88,7 @@ public class RedemptionService {
     }
 
     /**
-     * Redeems, propagating the caller's correlation id to billing-service — COUPON-620.
+     * Redeems, propagating the caller's correlation id to billing-service — COUPON-625.
      *
      * <p>{@code correlationId} identifies the caller's request, not the shopper. It is passed
      * straight through to {@link BillingClient} and is read by nothing here: no gate consults

@@ -23,12 +23,23 @@ environmentVariables:
 # charge is a discount we cannot account for, so we hold instead of applying it.
 dependencies:
   - service: billing-service
+    repository: https://github.com/ashahatlas/billing-service
+    criticality: hard
+    contract: docs/dependencies.md
+    calls:
+      - POST /v1/invoices/{invoiceId}/charge
+    # COUPON-625. Sent as a request header, never on the charge body — the body is validated
+    # against their pinned schema, a header is not. Omitted when the caller sends none, so
+    # billing-service needs no change for this to ship.
+    sends:
+      - X-Beacon-Correlation-Id (header, optional)
 
 # Downstream consumers of our published redemption contract (docs/api/redemption.md).
 # Kept here because the platform uses it for change notification: anything that changes the
 # name, type or meaning of a published field has to reach these teams before it deploys.
 consumers:
   - service: order-service
+    repository: https://github.com/ashahatlas/order-service
     tier: 1
     contract: docs/api/redemption.md
     pinnedVersion: 2.4.0
@@ -36,6 +47,11 @@ consumers:
     reads:
       - charge response — cardType, acquirerReference, subtotal, tax, total
       - beaconstone.billing.charge.completed
+    # COUPON-625. Optional on the request, so no pinned-version bump and nothing to migrate:
+    # a consumer that never sends it is unaffected. Listed because the platform uses this
+    # file for change notification, and because sending it is what makes the id useful.
+    maySend:
+      - X-Beacon-Correlation-Id (header, optional, POST /v1/redemptions)
 
 alarms:
   - name: RedemptionHeldRate

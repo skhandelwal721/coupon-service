@@ -74,6 +74,33 @@ the card network, the coupon, or the amount.
 **What would make this safe:** a contract version bump we can pick up on our own schedule. An
 additive field is not additive for a generated strict consumer.
 
+## 5. Correlation id passthrough — COUPON-625
+
+This is the one item on this page that is **not** something we depend on `billing-service`
+publishing. It is something we now send them, and it is the only surface in this service that
+touches all three parties in one request. Recorded here because this file is what the platform
+and any change assessment read for our declared topology.
+
+| Party | Repository | Role | Surface | What it has to do |
+| --- | --- | --- | --- | --- |
+| `order-service` | `https://github.com/ashahatlas/order-service` | **upstream consumer** (tier 1, pinned `2.4.0`) | `POST /v1/redemptions`, header `X-Beacon-Correlation-Id` | **nothing.** The header is optional and the request body is unchanged, so a consumer that never sends it is unaffected. Sending its own request id is a one-line opt-in |
+| `coupon-service` | this repository | **passthrough** | `RedemptionController` → `RedemptionService` → `BillingClient` | reads the header if present, forwards it, reads it for nothing else |
+| `billing-service` | `https://github.com/ashahatlas/billing-service` | **downstream dependency** (hard) | `POST /v1/invoices/{invoiceId}/charge`, header `X-Beacon-Correlation-Id` | **nothing.** The id arrives as a request header, which is not schema-validated and is ignored by a service that does not read it. Reading it into their charge logs is a one-line opt-in |
+
+**Why a header and not a body field.** Section 4 above is the reason: the charge request body is
+validated against `billing-service`'s pinned schema, in both directions. A new body field would
+be a contract change needing their release, their version bump and an ordered deploy. A header is
+outside that schema, so this ships from our side alone.
+
+**What breaks if either neighbour does nothing.** Nothing. The chain degrades to what it is
+today: `order-service` sends no id, we forward no header, `billing-service` logs no id, and
+joining an order to its charge stays a manual match on invoice id and timestamp.
+
+**What it is not.** Not read by any gate here — not velocity, not the country check, not funding
+eligibility. Not persisted: it is absent from the receipt, the promotion ledger and the
+attribution export, so no consumer of those has anything to change. Not a customer identifier —
+it identifies the caller's request, and the contract says not to put customer information in it.
+
 ## Endpoint choice
 
 We call `POST /v1/invoices/{invoiceId}/charge` and have deliberately not migrated to
@@ -87,3 +114,4 @@ We call `POST /v1/invoices/{invoiceId}/charge` and have deliberately not migrate
 | `cardType` is a network | `500` on every redemption | checkout down for all coupon users | `RedemptionErrorRate` alarm |
 | `subtotal + tax == total` | `422`, redemption held | checkout fails for affected charges | `RedemptionHeldRate` alarm |
 | `acquirerReference` prefix | silent — liability never reversed | none visible | `UnmatchedChargebackRate` alarm, eventually |
+| Correlation id header (COUPON-625) | header ignored downstream | none — the redemption and the charge are unaffected | nothing to detect; the id is absent from logs, which is today's behaviour |
