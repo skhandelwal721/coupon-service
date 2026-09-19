@@ -70,6 +70,12 @@ class RedemptionServicePercentageKillSwitchTest {
                 new BigDecimal("50.00"), new BigDecimal("0.00"), new BigDecimal("50.00"),
                 "EUR", "VISA", "visa_abc", "SETTLED");
         when(billing.charge(anyString(), anyString(), anyString(), any(), any())).thenReturn(charge);
+        // COUPON-610 fix: the percentage path now applies the computed discount to the card via
+        // a second billing call. Stub it to return the re-settled charge (50.00 - 10.00 = 40.00).
+        BillingChargeView reduced = new BillingChargeView("chg_1", "inv-1001",
+                new BigDecimal("40.00"), new BigDecimal("0.00"), new BigDecimal("40.00"),
+                "EUR", "VISA", "visa_abc", "SETTLED");
+        when(billing.applyPromotionalDiscount(any(), any())).thenReturn(reduced);
         when(rules.isEligible(any(), any())).thenReturn(true);
         when(rules.fundingNetwork(any())).thenReturn(CardNetwork.VISA);
 
@@ -78,8 +84,10 @@ class RedemptionServicePercentageKillSwitchTest {
 
         RedemptionReceipt receipt = service.redeem(request("BS-EUP-20"));
 
-        // The new path ran: a charge was taken and the discount booked (20% of 5000 = 1000).
+        // The new path ran: a charge was taken, the discount was applied to the card, and the
+        // (matching) discount booked (20% of 5000 = 1000).
         verify(billing).charge(anyString(), anyString(), anyString(), any(), any());
+        verify(billing).applyPromotionalDiscount(any(), any());
         verify(ledger).book(any());
         org.junit.jupiter.api.Assertions.assertEquals(new BigDecimal("1000"), receipt.discount());
     }
