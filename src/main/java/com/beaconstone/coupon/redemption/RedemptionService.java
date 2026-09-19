@@ -113,10 +113,47 @@ public class RedemptionService {
                 .setScale(0, java.math.RoundingMode.DOWN);
         java.math.BigDecimal discountMinorUnits = coupon.discountMinorUnitsFor(subtotalMinorUnits);
 
+        // COUPON-610 fix: second leg of the two-phase apply. For a FIXED coupon the deduction
+        // already rode on the charge call as preChargeAdjustment, so the card is settled at the
+        // reduced amount and there is nothing more to apply. For a PERCENTAGE coupon the charge
+        // was taken at the full subtotal (preChargeAdjustment was zero, because the rate needed
+        // the subtotal the charge establishes); we now push the computed deduction back to
+        // billing-service so the card is actually settled at subtotal - discount. Without this
+        // the ledger booked a discount the customer never received on their statement.
+        java.math.BigDecimal cardDeductionMinorUnits;
+        if (coupon.discountType() == Coupon.DiscountType.PERCENTAGE
+                && discountMinorUnits.signum() > 0) {
+            java.math.BigDecimal subtotalBeforeMinorUnits = subtotalMinorUnits;
+            charge = billingClient.applyPromotionalDiscount(charge, discountMinorUnits);
+            java.math.BigDecimal subtotalAfterMinorUnits = charge.subtotal()
+                    .multiply(new java.math.BigDecimal("100"))
+                    .setScale(0, java.math.RoundingMode.DOWN);
+            cardDeductionMinorUnits = subtotalBeforeMinorUnits.subtract(subtotalAfterMinorUnits);
+
+            // The re-settled charge must still balance under billing-service's published
+            // invariant (subtotal + tax == total). If applying the discount left a charge we
+            // can no longer account for, hold the redemption rather than book against it.
+            auditor.requireAccountable(charge);
+        } else {
+            // FIXED (or a zero-valued percentage): the deduction was applied at charge time, so
+            // the amount taken off the card is the amount we computed.
+            cardDeductionMinorUnits = discountMinorUnits;
+        }
+
+        // COUPON-610 fix: the money that moved off the card must equal the liability we are
+        // about to book. This is the invariant whose absence let a percentage discount be
+        // booked to the ledger while the customer was charged in full. If they ever disagree,
+        // hold the redemption loudly instead of writing a reconciliation break to the ledger.
+        if (cardDeductionMinorUnits.compareTo(discountMinorUnits) != 0) {
+            throw new DiscountNotAppliedToChargeException(
+                    coupon.code(), charge.chargeId(), discountMinorUnits, cardDeductionMinorUnits);
+        }
+
         log.info("redeemed redemptionId={} couponCode={} chargeId={} network={} currency={} "
-                        + "discountMinorUnits={} sepaSettled={}",
+                        + "discountMinorUnits={} cardDeductionMinorUnits={} sepaSettled={}",
                 redemptionId, coupon.code(), charge.chargeId(), network,
-                coupon.settlementCurrency(), discountMinorUnits, coupon.isSepaSettled());
+                coupon.settlementCurrency(), discountMinorUnits, cardDeductionMinorUnits,
+                coupon.isSepaSettled());
 
         RedemptionReceipt receipt = new RedemptionReceipt(
                 redemptionId,
@@ -143,6 +180,23 @@ public class RedemptionService {
     public static class PromotionNotFundedException extends RuntimeException {
         public PromotionNotFundedException(String message) {
             super(message);
+        }
+    }
+
+    /**
+     * COUPON-610 fix. The discount we were about to book to the ledger does not equal the amount
+     * actually taken off the card. Thrown to hold the redemption before {@link PromotionLedger}
+     * is touched, so the ledger can never record a discount the customer did not receive. This
+     * is the guard whose absence let a percentage discount settle on the ledger while the card
+     * was charged in full.
+     */
+    public static class DiscountNotAppliedToChargeException extends RuntimeException {
+        public DiscountNotAppliedToChargeException(String code, String chargeId,
+                                                   java.math.BigDecimal ledgerMinorUnits,
+                                                   java.math.BigDecimal cardMinorUnits) {
+            super("coupon " + code + " discount not applied to charge " + chargeId
+                    + ": ledger would book " + ledgerMinorUnits + " minor units but the card was"
+                    + " only reduced by " + cardMinorUnits + " minor units");
         }
     }
 
