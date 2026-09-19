@@ -147,9 +147,33 @@ public record Coupon(
         if (discountType == DiscountType.FIXED) {
             return discountMinorUnits();
         }
+        // COUPON-612. Two arguments reached the arithmetic below unguarded:
+        //
+        //   null      -> NullPointerException out of multiply(), from a method whose contract
+        //                says nothing about rejecting null;
+        //   negative  -> a negative result, which is not a discount.
+        //
+        // Both now answer zero, which is the correct amount for a subtotal that is absent or not
+        // positive, and keeps the method total for every input. Scale 0 matches the computed
+        // path, so a caller sees one shape of answer whatever it passes.
+        if (subtotalMinorUnits == null || subtotalMinorUnits.signum() <= 0) {
+            return BigDecimal.ZERO;
+        }
         return subtotalMinorUnits
                 .multiply(BigDecimal.valueOf(percentageBps))
                 .divide(BPS_PER_WHOLE, 0, RoundingMode.DOWN);
+    }
+
+    /**
+     * Whether {@link #discountMinorUnits()} can answer for this coupon.
+     *
+     * <p>Added by COUPON-612. {@code discountMinorUnits()} became partial when the PERCENTAGE
+     * type arrived — it answers for a FIXED coupon and throws for a PERCENTAGE one. That is the
+     * right behaviour, because there is no correct amount to return without a subtotal, but it
+     * left callers no way to ask before calling. This is that way to ask.
+     */
+    public boolean hasFixedAmount() {
+        return discountType == DiscountType.FIXED;
     }
 
     /**
