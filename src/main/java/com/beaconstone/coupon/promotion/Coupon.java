@@ -140,7 +140,27 @@ public record Coupon(
         }
         return discount
                 .multiply(MINOR_UNITS_PER_MAJOR)
-                .setScale(0, RoundingMode.DOWN);
+                .setScale(0, DISCOUNT_ROUNDING);
+    }
+
+    /**
+     * The discount as an integral number of minor units, given the charge {@code subtotal} in
+     * minor units.
+     *
+     * <p>For a FIXED coupon this is the fixed amount and {@code subtotal} is ignored, so callers
+     * can use this one method for either type. For a PERCENTAGE coupon it is
+     * {@code subtotal * percentageBps / 10000}, rounded with {@link #DISCOUNT_ROUNDING} —
+     * truncated down so the deduction never exceeds the agreed percentage of the subtotal
+     * billing-service returned, keeping it reconcilable against the charge. See
+     * {@link #DISCOUNT_ROUNDING} for why the direction matters.
+     */
+    public BigDecimal discountMinorUnitsFor(BigDecimal subtotalMinorUnits) {
+        if (discountType == DiscountType.FIXED) {
+            return discountMinorUnits();
+        }
+        return subtotalMinorUnits
+                .multiply(BigDecimal.valueOf(percentageBps))
+                .divide(BPS_PER_WHOLE, 0, DISCOUNT_ROUNDING);
     }
 
     /**
