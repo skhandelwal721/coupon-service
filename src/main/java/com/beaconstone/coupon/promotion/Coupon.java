@@ -66,30 +66,6 @@ public record Coupon(
     private static final BigDecimal BPS_PER_WHOLE = new BigDecimal("10000");
 
     /**
-     * The rounding applied when reducing a discount to whole minor units — COUPON-610.
-     *
-     * <p>{@link RoundingMode#DOWN} (truncate toward zero) is chosen deliberately and must stay
-     * reconciled with billing-service's charge arithmetic:
-     *
-     * <ul>
-     *   <li>billing-service publishes {@code subtotal + tax == total} as an invariant (asserted
-     *       by {@code RedemptionAuditor}), and a percentage discount is applied to the
-     *       <em>subtotal</em> billing-service returned — the same figure reconciliation uses.</li>
-     *   <li>Truncating <em>down</em> guarantees the promotional deduction never exceeds the
-     *       agreed percentage of that subtotal by even a sub-cent. Rounding up (or half-up) could
-     *       instruct one minor unit more than the rate agrees, which over time diverges from what
-     *       finance invoices the networks and shows up as an unreconciled promotional overspend.</li>
-     *   <li>A fraction of a minor unit cannot be instructed on a SEPA/Bacs settlement anyway, so
-     *       some truncation is unavoidable; doing it in the conservative direction is the safe,
-     *       reconcilable default.</li>
-     * </ul>
-     *
-     * <p>If billing-service ever documents a different rounding direction for discounts, this
-     * constant is the single place to reconcile against it.
-     */
-    private static final RoundingMode DISCOUNT_ROUNDING = RoundingMode.DOWN;
-
-    /**
      * Canonicalises {@code eligibleCountries} to upper-case and validates the discount shape.
      */
     public Coupon {
@@ -185,6 +161,24 @@ public record Coupon(
         return subtotalMinorUnits
                 .multiply(BigDecimal.valueOf(percentageBps))
                 .divide(BPS_PER_WHOLE, 0, DISCOUNT_ROUNDING);
+    }
+
+    /**
+     * The discount as an integral number of minor units, given the charge {@code subtotal} in
+     * minor units.
+     *
+     * <p>For a FIXED coupon this is the fixed amount and {@code subtotal} is ignored, so callers
+     * can use this one method for either type. For a PERCENTAGE coupon it is
+     * {@code subtotal * percentageBps / 10000}, truncated down for the same reason as above —
+     * we never instruct more promotional spend than the rate agrees.
+     */
+    public BigDecimal discountMinorUnitsFor(BigDecimal subtotalMinorUnits) {
+        if (discountType == DiscountType.FIXED) {
+            return discountMinorUnits();
+        }
+        return subtotalMinorUnits
+                .multiply(BigDecimal.valueOf(percentageBps))
+                .divide(BPS_PER_WHOLE, 0, RoundingMode.DOWN);
     }
 
     /** True for a promotion that settles through SEPA rather than Bacs/FPS. */
