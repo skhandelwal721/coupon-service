@@ -82,6 +82,20 @@ public class RedemptionController {
         return e.getMessage();
     }
 
+    /**
+     * COUPON-610 fix. The discount that would have been booked to the ledger did not match the
+     * amount actually taken off the card, so the redemption was held before the ledger was
+     * touched. Surfaced as {@code 500}: this is an internal money-path invariant failing, not a
+     * customer input problem, and it means billing-service did not settle the discount we
+     * computed. The customer sees checkout fail rather than a "discount applied" message against
+     * a card that was charged in full.
+     */
+    @ExceptionHandler(RedemptionService.DiscountNotAppliedToChargeException.class)
+    @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
+    public String discountNotApplied(RedemptionService.DiscountNotAppliedToChargeException e) {
+        return e.getMessage();
+    }
+
     @ExceptionHandler(RedemptionService.UnknownCouponException.class)
     @ResponseStatus(HttpStatus.NOT_FOUND)
     public String unknownCoupon(RedemptionService.UnknownCouponException e) {
