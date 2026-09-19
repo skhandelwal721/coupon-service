@@ -2,6 +2,7 @@ package com.beaconstone.coupon.redemption;
 
 import com.beaconstone.coupon.analytics.RedemptionAnalyticsClient;
 import com.beaconstone.coupon.audit.RedemptionAuditor;
+import com.beaconstone.coupon.billing.BillingClient;
 import com.beaconstone.coupon.fraud.VelocityGuard;
 import com.beaconstone.coupon.payments.AmexEuropeEligibility;
 import jakarta.validation.Valid;
@@ -9,6 +10,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
@@ -38,11 +40,22 @@ public class RedemptionController {
         this.analytics = analytics;
     }
 
+    /**
+     * @param correlationId optional, from {@code X-Beacon-Correlation-Id} — COUPON-620. The
+     *                      caller's own identifier for the request, propagated to
+     *                      {@code billing-service} so one redemption can be followed across
+     *                      {@code order-service}, here and the charge. Read by nothing on this
+     *                      path: no gate consults it and no decision depends on it. Absent means
+     *                      absent — the redemption behaves exactly as it did before.
+     */
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public RedemptionReceipt redeem(@Valid @RequestBody RedemptionRequest request) {
+    public RedemptionReceipt redeem(
+            @Valid @RequestBody RedemptionRequest request,
+            @RequestHeader(name = BillingClient.CORRELATION_ID_HEADER, required = false)
+            String correlationId) {
         velocityGuard.check(request);
-        RedemptionReceipt receipt = redemptionService.redeem(request);
+        RedemptionReceipt receipt = redemptionService.redeem(request, correlationId);
         analytics.publish(receipt, request);
         return receipt;
     }

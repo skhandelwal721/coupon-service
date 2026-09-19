@@ -1,8 +1,36 @@
 # Redemption API
 
-**Contract version: 3.2.0.** Consumers generate or hand-write their DTO against a pinned
+**Contract version: 3.3.0.** Consumers generate or hand-write their DTO against a pinned
 version of this document — see `coupon.contract.version` in the consuming repository. Any change
 to a field's **name, type or meaning** is a major bump and has to be announced before it ships.
+
+### Changed in 3.3.0 — COUPON-620, correlation id passthrough
+
+Additive on top of 3.2.0. **No field is added, removed or changed** — request and response
+bodies are byte-for-byte what they were in 3.2.0.
+
+**Request — one new optional header:**
+
+| Header | Required | Purpose |
+| --- | --- | --- |
+| `X-Beacon-Correlation-Id` | no | the caller's own identifier for the request, so one redemption can be followed across `order-service`, this service and the `billing-service` charge |
+
+Send it and we propagate it, as the same header, on the charge call to `billing-service`. Omit it
+and nothing changes: the redemption behaves exactly as it did in 3.2.0, and the header is simply
+not sent onward.
+
+Three things it is deliberately not:
+
+- **not read by any gate.** No decision on this path consults it — not velocity, not the country
+  check, not funding eligibility.
+- **not persisted.** It is not written to the receipt, the promotion ledger or the attribution
+  export, so no consumer of those has anything to change.
+- **not a customer identifier.** It identifies the caller's request. Do not put customer
+  information in it.
+
+A consumer that does nothing has nothing to do. This is worth sending because without it, joining
+an order to its redemption and its charge is done by timestamp and invoice id across three
+services' logs.
 
 ### Changed in 3.2.0 — COUPON-573, country-scoped coupons
 
