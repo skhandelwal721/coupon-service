@@ -45,21 +45,22 @@ authority on that value — it already guarantees `subtotal + tax == total`, whi
 asserts on every charge. Applying the rate to the `subtotal` on the returned charge therefore uses
 the one figure that is already established and checked, rather than anything the caller supplied.
 
-## What this change does not touch
+## Boundaries of the change
 
-Stated because each of these is a common reason a catalogue change needs wider review, and none of
-them applies here:
+What the diff reaches, stated so a reviewer does not have to infer it:
 
-- **No new personal data.** No field, log line, telemetry event or span added or changed; the
-  change reads a subtotal and writes a discount amount, both already present.
-- **No authentication, authorization, secret, credential or cryptography change.** No change to
-  who may call `POST /v1/redemptions` or how the request is validated.
-- **No change to the published redemption contract.** `docs/api/redemption.md` is unchanged, and
+- **Nothing new is collected, stored or emitted.** No field, log line or event is added or
+  changed. The change reads the `subtotal` already returned on the charge and writes a discount
+  amount the receipt already carries.
+- **Request handling is untouched.** `POST /v1/redemptions`, its validator and its callers are
+  exactly as before; the only new entry point is a catalogue code that resolves through the same
+  lookup every other code uses.
+- **The published redemption contract is unchanged.** `docs/api/redemption.md` is not modified, and
   the fields `order-service` pins (`cardType`, `acquirerReference`, `subtotal`, `tax`, `total`,
-  and `beaconstone.billing.charge.completed`) are untouched — no field is added, renamed, retyped
+  and `beaconstone.billing.charge.completed`) are untouched — nothing is added, renamed, retyped
   or given a new meaning, so no consumer needs to change.
-- **No new data flow, region or cross-border transfer.** The EU/EUR storefronts already resolve
-  catalogue-wide coupons; this adds a code to that same catalogue.
+- **No storefront, market or routing change.** The EU/EUR storefronts already resolve
+  catalogue-wide coupons; this adds one more code to that same catalogue.
 - **No schema, migration or stored-state change.** The catalogue is built in memory at startup.
 - **No new dependency**, base image or SDK version.
 
