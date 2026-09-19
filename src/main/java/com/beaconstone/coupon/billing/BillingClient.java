@@ -53,14 +53,49 @@ public class BillingClient {
     }
 
     /**
+     * The header the caller's correlation id travels on — COUPON-620.
+     *
+     * <p>Public and defined once: the entrypoint reads the header by this name and this client
+     * sends it on by the same name, so the two cannot drift apart.
+     */
+    public static final String CORRELATION_ID_HEADER = "X-Beacon-Correlation-Id";
+
+    /**
      * Charges an invoice through billing-service and returns the charge as we understand it.
      *
      * <p>The response is deserialized into {@link BillingChargeView}, which is strict. A
      * response carrying a field our pinned contract version does not declare fails here.
+     *
+     * <p>Form without a correlation id, retained for call sites that predate COUPON-620 —
+     * including the promotions backfill job. Behaves exactly as before.
      */
     public BillingChargeView charge(String invoiceId, String cardNumber, String currency,
                                    String billingPostcode, BigDecimal promotionalAdjustment) {
+        return charge(invoiceId, cardNumber, currency, billingPostcode, promotionalAdjustment,
+                null);
+    }
+
+    /**
+     * As above, propagating the caller's correlation id to billing-service — COUPON-620.
+     *
+     * <p>{@code correlationId} is sent as the {@code X-Beacon-Correlation-Id} <strong>request
+     * header</strong>, not on the body. That is deliberate: the charge request body is validated
+     * against billing-service's pinned schema, so adding a field to it would be a contract
+     * change needing their release. A header is not schema-validated and is ignored by a service
+     * that does not read it, which is what makes this safe to ship on our side alone.
+     *
+     * <p>{@code null} or blank means the caller sent none: the header is omitted and the call is
+     * byte-for-byte what it was before.
+     */
+    public BillingChargeView charge(String invoiceId, String cardNumber, String currency,
+                                   String billingPostcode, BigDecimal promotionalAdjustment,
+                                   String correlationId) {
         String url = baseUrl + chargePath.replace("{invoiceId}", invoiceId);
+
+        // A blank id is a caller that sent the header with nothing in it. Treat that as no id
+        // rather than propagating an empty value, so downstream never has to distinguish the two.
+        String propagatedCorrelationId =
+                correlationId == null || correlationId.isBlank() ? null : correlationId;
 
         // SEPA structured-address form. The same element goes on to the settlement
         // instruction, so it has to be clearing-house clean before it leaves us.
@@ -71,8 +106,9 @@ public class BillingClient {
         String maskedCardNumber = cardMask.mask(cardNumber);
 
         log.info("charging via billing-service invoiceId={} url={} currency={} cardNumber={} "
-                        + "postcodeSent={}",
-                invoiceId, url, currency, maskedCardNumber, sepaPostcode != null);
+                        + "postcodeSent={} correlationId={}",
+                invoiceId, url, currency, maskedCardNumber, sepaPostcode != null,
+                propagatedCorrelationId);
 
         log.info("applying promotional adjustment invoiceId={} adjustment={}",
                 invoiceId, promotionalAdjustment);
@@ -80,7 +116,9 @@ public class BillingClient {
         // Stubbed for the fixture: the real client POSTs
         // { cardNumber: maskedCardNumber, currency, billingPostcode: sepaPostcode } to the
         // charge path and deserializes into BillingChargeView with the strict ObjectMapper
-        // configured in application.yml. promotionalAdjustment goes on the same body.
+        // configured in application.yml. promotionalAdjustment goes on the same body, and
+        // propagatedCorrelationId goes on the CORRELATION_ID_HEADER header when it is non-null,
+        // and the header is omitted entirely when it is null.
         return new BillingChargeView(
                 "chg_9f3b7c21",
                 invoiceId,

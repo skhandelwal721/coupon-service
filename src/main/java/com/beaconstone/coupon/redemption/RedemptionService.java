@@ -79,7 +79,23 @@ public class RedemptionService {
         this.percentageRedemptionEnabled = percentageRedemptionEnabled;
     }
 
+    /**
+     * Form without a correlation id, retained for call sites that predate COUPON-620 —
+     * including the promotions backfill job. Behaves exactly as before.
+     */
     public RedemptionReceipt redeem(RedemptionRequest request) {
+        return redeem(request, null);
+    }
+
+    /**
+     * Redeems, propagating the caller's correlation id to billing-service — COUPON-620.
+     *
+     * <p>{@code correlationId} identifies the caller's request, not the shopper. It is passed
+     * straight through to {@link BillingClient} and is read by nothing here: no gate consults
+     * it, it is not part of any decision, and it is not written to the receipt or the ledger.
+     * {@code null} means the caller sent none, and the redemption behaves exactly as before.
+     */
+    public RedemptionReceipt redeem(RedemptionRequest request, String correlationId) {
         Coupon coupon = couponRepository.find(request.couponCode())
                 .orElseThrow(() -> new UnknownCouponException(request.couponCode()));
 
@@ -117,7 +133,7 @@ public class RedemptionService {
 
         BillingChargeView charge = billingClient.charge(
                 request.invoiceId(), request.cardNumber(), request.currency(),
-                request.billingPostcode(), preChargeAdjustment);
+                request.billingPostcode(), preChargeAdjustment, correlationId);
 
         auditor.requireAccountable(charge);
 
@@ -139,9 +155,10 @@ public class RedemptionService {
         java.math.BigDecimal discountMinorUnits = coupon.discountMinorUnitsFor(subtotalMinorUnits);
 
         log.info("redeemed redemptionId={} couponCode={} chargeId={} network={} currency={} "
-                        + "discountMinorUnits={} sepaSettled={}",
+                        + "discountMinorUnits={} sepaSettled={} correlationId={}",
                 redemptionId, coupon.code(), charge.chargeId(), network,
-                coupon.settlementCurrency(), discountMinorUnits, coupon.isSepaSettled());
+                coupon.settlementCurrency(), discountMinorUnits, coupon.isSepaSettled(),
+                correlationId);
 
         RedemptionReceipt receipt = new RedemptionReceipt(
                 redemptionId,
