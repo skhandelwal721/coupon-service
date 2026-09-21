@@ -1,5 +1,7 @@
 package com.beaconstone.coupon.redemption;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 import java.math.BigDecimal;
 
 /**
@@ -34,6 +36,29 @@ public record RedemptionReceipt(
         String couponCode,
         String chargeId,
         String fundingNetwork,
+
+        /**
+         * COUPON-616. Serialized as {@code discountMinorUnits}, not {@code discount}.
+         *
+         * <p>From 3.0.0 this field carries minor units where 2.4.0 carried major units, and it
+         * kept its name and its {@code BigDecimal} type through that change. {@code discountUnit}
+         * states the representation, and {@code docs/api/redemption.md} records that a consumer
+         * pinned to 2.4.0 does not read it — so such a consumer reads a figure 100x larger than
+         * intended, arithmetically valid, with nothing thrown and nothing logged.
+         *
+         * <p>Naming the unit on the wire makes that loud. A consumer that has not been updated
+         * finds no {@code discount} field rather than a wrong number in it. Per the compatibility
+         * rule in {@code docs/api/redemption.md}, a change to a field's name is a major bump and
+         * has to be announced before it ships.
+         *
+         * <p>The Java accessor is unchanged, so every in-process caller — {@code PromotionLedger},
+         * {@code AttributionExport}, {@code RedemptionAnalyticsClient} — is untouched. This is a
+         * wire-format change only.
+         *
+         * <p>Consumers of this field are listed in
+         * {@code docs/api/COUPON-616-affected-services.md}.
+         */
+        @JsonProperty("discountMinorUnits")
         BigDecimal discount,
         String discountUnit,
         String settlementCurrency,
