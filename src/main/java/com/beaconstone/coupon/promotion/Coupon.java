@@ -169,8 +169,11 @@ public record Coupon(
             // A PERCENTAGE coupon holds discount == ZERO, so without this the method would
             // quietly answer 0 for a coupon that has a perfectly good amount, just not one that
             // can be known without a subtotal. Fail loudly instead of returning a wrong figure.
+            // The message carries no operand — not the code, not the rate, not the caller's
+            // arguments. A thrown message is the one string on this path that reaches a log
+            // without passing through a formatter, so it states the contract and nothing else.
             throw new IllegalStateException(
-                    "coupon " + code + " is PERCENTAGE; use discountMinorUnitsFor(subtotal)");
+                    "PERCENTAGE coupon has no fixed amount; use discountMinorUnitsFor(subtotal)");
         }
         return discount
                 .multiply(MINOR_UNITS_PER_MAJOR)

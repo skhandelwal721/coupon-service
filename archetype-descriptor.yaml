@@ -3,7 +3,7 @@ name: coupon-service
 description: Promotional coupons and redemption reconciliation for Beacon Stone Retail
 organization: beacon-stone-retail
 owner: growth-platform
-tier: 1
+tier: 4
 notifications:
   email: growth-platform@beaconstone.example
 
