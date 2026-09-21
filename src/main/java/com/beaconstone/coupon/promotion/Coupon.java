@@ -57,6 +57,14 @@ public record Coupon(
                 : eligibleCountries.stream()
                         .map(c -> c.toUpperCase(Locale.ROOT))
                         .collect(Collectors.toUnmodifiableSet());
+
+        // COUPON-614. An entry with no amount recorded is a malformed entry, not an entry worth
+        // nothing, so it is refused here rather than answered for later. The catalogue is built
+        // once at startup, which makes this the earliest point the fault can surface and the only
+        // one where it cannot already have been acted on. The message carries no operand.
+        if (discount == null) {
+            throw new IllegalArgumentException("a coupon must record an amount");
+        }
     }
 
     /**
@@ -93,19 +101,16 @@ public record Coupon(
      * <p>Truncates rather than rounds: a fraction of a cent cannot be instructed, and rounding
      * up would instruct more promotional spend than was agreed.
      *
-     * <p><strong>COUPON-613.</strong> An absent {@code discount} answers zero rather than raising
-     * {@code NullPointerException} out of {@code multiply()}. The record permits a null component,
-     * so the accessor was reachable with one, and a method that fails for an input its own contract
-     * never mentioned is the class of defect recorded in
-     * <a href="https://beacon-stone.atlassian.net/browse/ITS-6417">ITS-6417</a> and reviewed in its
-     * <a href="https://beacon-stone.atlassian.net/wiki/spaces/~7120208dc3f3563fea41ee89696ea7fa6c3744/pages/151519389">post-incident review</a>.
-     * That review's standing action is that an accessor answer for every input it can be handed, or
-     * let the caller ask first. This makes the method total for the one input it was not.
+     * <p><strong>COUPON-614.</strong> {@code discount} is guaranteed present by the constructor, so
+     * this accessor has one input class and one answer. COUPON-613 had an absent amount answer zero
+     * here, which read as "nothing off" and was indistinguishable from a real zero — a silently
+     * wrong figure where the fault is a malformed entry. Refusing the entry at construction is the
+     * earlier and safer place, and it is the reading of
+     * <a href="https://beacon-stone.atlassian.net/browse/ITS-6417">ITS-6417</a> and its
+     * <a href="https://beacon-stone.atlassian.net/wiki/spaces/~7120208dc3f3563fea41ee89696ea7fa6c3744/pages/151519389">post-incident review</a>
+     * that holds: make the input impossible rather than answering for it.
      */
     public BigDecimal discountMinorUnits() {
-        if (discount == null) {
-            return BigDecimal.ZERO;
-        }
         return discount
                 .multiply(MINOR_UNITS_PER_MAJOR)
                 .setScale(0, RoundingMode.DOWN);
