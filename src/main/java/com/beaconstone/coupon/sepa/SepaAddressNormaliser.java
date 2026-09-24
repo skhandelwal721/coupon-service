@@ -5,6 +5,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.util.Locale;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
@@ -37,6 +38,14 @@ public class SepaAddressNormaliser {
     private static final Pattern NON_ALPHANUMERIC = Pattern.compile("[^A-Za-z0-9]");
 
     /**
+     * Reused across calls so a matcher is not allocated per instruction.
+     *
+     * <p>COUPON-621: {@code Pattern#matcher} allocates on every call, and this method runs on the
+     * hot path. Holding one and resetting it keeps the allocation out of the loop.
+     */
+    private final Matcher matcher = NON_ALPHANUMERIC.matcher("");
+
+    /**
      * The postcode as SEPA will accept it.
      *
      * @param postcode as collected by the storefront, may be {@code null}
@@ -52,7 +61,7 @@ public class SepaAddressNormaliser {
         // here as two different values on two hosts. In a Turkish default locale "i" upper-cases to
         // "\u0130" — outside the alphanumeric set this element accepts, and stripped by a pattern
         // that has already run. Pinning the locale makes the output a function of the input alone.
-        String normalised = NON_ALPHANUMERIC.matcher(postcode).replaceAll("")
+        String normalised = matcher.reset(postcode).replaceAll("")
                 .toUpperCase(Locale.ROOT);
 
         if (!normalised.equals(postcode)) {

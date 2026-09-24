@@ -1,7 +1,7 @@
 # COUPON-621 — change record
 
-**Change:** in `SepaAddressNormaliser`, compile the strip pattern once and pin the upper-casing
-locale to `Locale.ROOT`.
+**Change:** in `SepaAddressNormaliser`, compile the strip pattern once, reuse a single matcher
+across calls, and pin the upper-casing locale to `Locale.ROOT`.
 
 ---
 
@@ -9,7 +9,7 @@ locale to `Locale.ROOT`.
 
 | File | What changes |
 |---|---|
-| `src/main/java/com/beaconstone/coupon/sepa/SepaAddressNormaliser.java` | Pattern compiled once; `toUpperCase(Locale.ROOT)` |
+| `src/main/java/com/beaconstone/coupon/sepa/SepaAddressNormaliser.java` | Pattern compiled once; matcher held and reset per call; `toUpperCase(Locale.ROOT)` |
 | `src/test/java/com/beaconstone/coupon/sepa/SepaAddressNormaliserLocaleTest.java` | New |
 | `docs/change-risk/COUPON-621-change-record.md` | This record |
 
@@ -22,6 +22,11 @@ file.
 **Pattern compiled once — no behaviour change.** `String#replaceAll` recompiles its argument on
 every call. `Pattern.compile(...)` held in a `static final` field produces the identical result from
 the identical input; only the work done to get there differs.
+
+**Matcher reused — no behaviour change.** `Pattern#matcher` allocates on every call, and this
+method is on the hot path. One matcher is held on the component and `reset(...)` before each use,
+which keeps the allocation out of the loop. `reset` returns the same matcher positioned at the start
+of the new input, so each call sees the same state a fresh matcher would.
 
 **Locale pinned — this one does alter behaviour, in one direction.** `toUpperCase()` with no
 argument uses whatever locale the JVM was started with, so the same input could leave this method as
