@@ -93,22 +93,36 @@ public record Coupon(
      * <p>Truncates rather than rounds: a fraction of a cent cannot be instructed, and rounding
      * up would instruct more promotional spend than was agreed.
      *
-     * <p><strong>COUPON-613.</strong> An absent {@code discount} answers zero rather than raising
-     * {@code NullPointerException} out of {@code multiply()}. The record permits a null component,
-     * so the accessor was reachable with one, and a method that fails for an input its own contract
-     * never mentioned is the class of defect recorded in
-     * <a href="https://beacon-stone.atlassian.net/browse/ITS-6417">ITS-6417</a> and reviewed in its
-     * <a href="https://beacon-stone.atlassian.net/wiki/spaces/~7120208dc3f3563fea41ee89696ea7fa6c3744/pages/151519389">post-incident review</a>.
-     * That review's standing action is that an accessor answer for every input it can be handed, or
-     * let the caller ask first. This makes the method total for the one input it was not.
+     * <p><strong>COUPON-615.</strong> This accessor answers for a well-formed entry and nothing
+     * else. COUPON-613 had it answer zero for an absent amount, which read as "nothing off" and was
+     * indistinguishable from a real zero — a wrong figure returned quietly, with the crash that
+     * would have exposed it removed at the same time. The invariant is now checked where entries
+     * are published rather than patched where they are read: see {@link #isWellFormed()} and
+     * {@code CouponRepository}. Precedent:
+     * <a href="https://beacon-stone.atlassian.net/browse/ITS-6417">ITS-6417</a> and its
+     * <a href="https://beacon-stone.atlassian.net/wiki/spaces/~7120208dc3f3563fea41ee89696ea7fa6c3744/pages/151519389">post-incident review</a>,
+     * whose standing action is that a caller be able to ask before it calls.
      */
     public BigDecimal discountMinorUnits() {
-        if (discount == null) {
-            return BigDecimal.ZERO;
-        }
         return discount
                 .multiply(MINOR_UNITS_PER_MAJOR)
                 .setScale(0, RoundingMode.DOWN);
+    }
+
+    /**
+     * Whether this entry satisfies the invariant every published entry must satisfy — COUPON-615.
+     *
+     * <p>Today that is one condition: an amount is recorded. It is a predicate rather than a
+     * constructor check on purpose. Construction stays permissive so a test or a migration can
+     * build a partial entry deliberately; **publication** is what must be strict, because a
+     * partial entry that reaches the catalogue is resolvable, and a resolvable entry gets acted
+     * on. {@code CouponRepository} calls this on every entry as the catalogue is assembled.
+     *
+     * <p>Having the invariant as a predicate is the part COUPON-613 was missing. It had no way to
+     * ask, so it answered anyway.
+     */
+    public boolean isWellFormed() {
+        return discount != null;
     }
 
     /** True for a promotion that settles through SEPA rather than Bacs/FPS. */
