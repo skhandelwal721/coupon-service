@@ -7,6 +7,7 @@ import org.springframework.stereotype.Repository;
 import java.math.BigDecimal;
 import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -79,7 +80,12 @@ public class CouponRepository {
                     Coupon.EUR, eurFunding, Set.of("NL")));
         }
 
-        this.coupons = Map.copyOf(catalogue);
+        // COUPON-622. Every entry is checked against Coupon#isWellFormed before the catalogue is
+        // published. An entry that fails is malformed, not an entry worth nothing, and a published
+        // entry is resolvable — so it would be acted on. Failing here means the fault surfaces when
+        // the catalogue is assembled at startup, which a deploy shows, rather than as a zero-value
+        // redemption nobody is alerted to.
+        this.coupons = Map.copyOf(publishable(catalogue));
     }
 
     /**
@@ -94,6 +100,27 @@ public class CouponRepository {
     /** Test/backfill form: NL launch off, AMEX-in-Europe off. */
     public CouponRepository() {
         this(false, false);
+    }
+
+    /**
+     * The publication gate — COUPON-622.
+     *
+     * <p>Returns the catalogue unchanged when every entry is well formed, and refuses otherwise,
+     * naming the codes that failed so the fault is actionable without a debugger. The message
+     * carries catalogue codes, which are published identifiers, and nothing else.
+     */
+    static Map<String, Coupon> publishable(Map<String, Coupon> catalogue) {
+        List<String> malformed = catalogue.values().stream()
+                .filter(coupon -> !coupon.isWellFormed())
+                .map(Coupon::code)
+                .sorted()
+                .toList();
+
+        if (!malformed.isEmpty()) {
+            throw new IllegalStateException(
+                    "catalogue entries do not record an amount and cannot be published: " + malformed);
+        }
+        return catalogue;
     }
 
     public Optional<Coupon> find(String code) {
