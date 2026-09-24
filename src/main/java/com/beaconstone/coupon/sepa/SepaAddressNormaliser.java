@@ -4,6 +4,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
+import java.util.Locale;
+import java.util.regex.Pattern;
+
 /**
  * Normalises a customer postcode into SEPA structured-address form.
  *
@@ -25,8 +28,13 @@ public class SepaAddressNormaliser {
 
     private static final Logger log = LoggerFactory.getLogger(SepaAddressNormaliser.class);
 
-    /** Everything SEPA's structured-address element does not accept. */
-    private static final String NON_ALPHANUMERIC = "[^A-Za-z0-9]";
+    /**
+     * Everything SEPA's structured-address element does not accept.
+     *
+     * <p>COUPON-621: compiled once. {@code String#replaceAll} recompiles its argument on every
+     * call, and this runs on every instruction.
+     */
+    private static final Pattern NON_ALPHANUMERIC = Pattern.compile("[^A-Za-z0-9]");
 
     /**
      * The postcode as SEPA will accept it.
@@ -39,7 +47,13 @@ public class SepaAddressNormaliser {
             return null;
         }
 
-        String normalised = postcode.replaceAll(NON_ALPHANUMERIC, "").toUpperCase();
+        // COUPON-621: Locale.ROOT rather than the default locale. toUpperCase() with no argument
+        // uses whatever locale the JVM happens to be started with, so the same input could leave
+        // here as two different values on two hosts. In a Turkish default locale "i" upper-cases to
+        // "\u0130" — outside the alphanumeric set this element accepts, and stripped by a pattern
+        // that has already run. Pinning the locale makes the output a function of the input alone.
+        String normalised = NON_ALPHANUMERIC.matcher(postcode).replaceAll("")
+                .toUpperCase(Locale.ROOT);
 
         if (!normalised.equals(postcode)) {
             log.debug("normalised postcode for SEPA structured address");
