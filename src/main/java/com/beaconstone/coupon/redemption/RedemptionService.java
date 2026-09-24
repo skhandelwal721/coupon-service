@@ -50,20 +50,17 @@ public class RedemptionService {
     private final NetworkPromotionRules promotionRules;
     private final RedemptionAuditor auditor;
     private final PromotionLedger promotionLedger;
-    private final RedemptionIdFactory redemptionIds;
 
     public RedemptionService(BillingClient billingClient,
                              CouponRepository couponRepository,
                              NetworkPromotionRules promotionRules,
                              RedemptionAuditor auditor,
-                             PromotionLedger promotionLedger,
-                             RedemptionIdFactory redemptionIds) {
+                             PromotionLedger promotionLedger) {
         this.billingClient = billingClient;
         this.couponRepository = couponRepository;
         this.promotionRules = promotionRules;
         this.auditor = auditor;
         this.promotionLedger = promotionLedger;
-        this.redemptionIds = redemptionIds;
     }
 
     public RedemptionReceipt redeem(RedemptionRequest request) {
@@ -94,8 +91,7 @@ public class RedemptionService {
         }
 
         CardNetwork network = promotionRules.fundingNetwork(charge);
-        // COUPON-617: drawn from the factory, which will not return one it has issued before.
-        String redemptionId = redemptionIds.next();
+        String redemptionId = "rdm_" + UUID.randomUUID();
 
         // Minor units, so one settlement pipeline covers Bacs/FPS and SEPA. See Coupon.
         java.math.BigDecimal discountMinorUnits = coupon.discountMinorUnits();

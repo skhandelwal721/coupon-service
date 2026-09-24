@@ -92,20 +92,8 @@ public record Coupon(
      *
      * <p>Truncates rather than rounds: a fraction of a cent cannot be instructed, and rounding
      * up would instruct more promotional spend than was agreed.
-     *
-     * <p><strong>COUPON-613.</strong> An absent {@code discount} answers zero rather than raising
-     * {@code NullPointerException} out of {@code multiply()}. The record permits a null component,
-     * so the accessor was reachable with one, and a method that fails for an input its own contract
-     * never mentioned is the class of defect recorded in
-     * <a href="https://beacon-stone.atlassian.net/browse/ITS-6417">ITS-6417</a> and reviewed in its
-     * <a href="https://beacon-stone.atlassian.net/wiki/spaces/~7120208dc3f3563fea41ee89696ea7fa6c3744/pages/151519389">post-incident review</a>.
-     * That review's standing action is that an accessor answer for every input it can be handed, or
-     * let the caller ask first. This makes the method total for the one input it was not.
      */
     public BigDecimal discountMinorUnits() {
-        if (discount == null) {
-            return BigDecimal.ZERO;
-        }
         return discount
                 .multiply(MINOR_UNITS_PER_MAJOR)
                 .setScale(0, RoundingMode.DOWN);
