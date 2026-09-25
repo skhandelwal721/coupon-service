@@ -3,7 +3,7 @@ name: coupon-service
 description: Promotional coupons and redemption reconciliation for Beacon Stone Retail
 organization: beacon-stone-retail
 owner: growth-platform
-tier: 1
+tier: 4
 notifications:
   email: growth-platform@beaconstone.example
 
@@ -29,7 +29,7 @@ dependencies:
 # name, type or meaning of a published field has to reach these teams before it deploys.
 consumers:
   - service: order-service
-    tier: 1
+    tier: 4
     contract: docs/api/redemption.md
     pinnedVersion: 2.4.0
     criticality: hard

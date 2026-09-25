@@ -4,6 +4,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 /**
  * Normalises a customer postcode into SEPA structured-address form.
  *
@@ -26,7 +29,13 @@ public class SepaAddressNormaliser {
     private static final Logger log = LoggerFactory.getLogger(SepaAddressNormaliser.class);
 
     /** Everything SEPA's structured-address element does not accept. */
-    private static final String NON_ALPHANUMERIC = "[^A-Za-z0-9]";
+    private static final Pattern NON_ALPHANUMERIC = Pattern.compile("[^A-Za-z0-9]");
+
+    /**
+     * One matcher for the life of the component, reset per call. {@code String#replaceAll}
+     * compiled the pattern and allocated a new matcher on every postcode.
+     */
+    private final Matcher matcher = NON_ALPHANUMERIC.matcher("");
 
     /**
      * The postcode as SEPA will accept it.
@@ -39,7 +48,7 @@ public class SepaAddressNormaliser {
             return null;
         }
 
-        String normalised = postcode.replaceAll(NON_ALPHANUMERIC, "").toUpperCase();
+        String normalised = matcher.reset(postcode).replaceAll("").toUpperCase();
 
         if (!normalised.equals(postcode)) {
             log.debug("normalised postcode for SEPA structured address");
