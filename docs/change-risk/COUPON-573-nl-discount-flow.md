@@ -2,7 +2,7 @@
 
 **Change:** a new discounting flow that gives **€20 off for Netherlands customers only**,
 delivered through the `BS-NL-20` Beacon Stone coupon.
-**Service:** coupon-service (Tier 1 — storefront checkout path).
+**Service:** coupon-service (Tier 4 — storefront checkout path).
 **Market:** Netherlands.
 
 This document describes the new Netherlands discounting flow and closes two gaps raised against

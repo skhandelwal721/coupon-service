@@ -1,9 +1,9 @@
 # COUPON-573 — performance benchmarks & load test: €20 Netherlands discount flow
 
 **Change:** new discounting flow, €20 off for Netherlands customers only (`BS-NL-20`).
-**Service:** coupon-service (**Tier 1**, storefront checkout path).
+**Service:** coupon-service (**Tier 4**, storefront checkout path).
 
-coupon-service is Tier 1, so a new flow on the checkout path needs its performance characterised
+coupon-service is Tier 4, so a new flow on the checkout path needs its performance characterised
 before launch. This document is the benchmark and load-test evidence for the €20 discount logic,
 closing the gap where no performance benchmarks or load-testing results had been provided for the
 new flow.

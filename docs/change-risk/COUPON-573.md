@@ -2,7 +2,7 @@
 
 **Change:** enable `BS-NL-20`, a Netherlands-only Beacon Stone coupon, in Production.
 **Delivered by:** coupon-service PR #46 (merged).
-**Service:** coupon-service (Tier 1 — storefront checkout path).
+**Service:** coupon-service (Tier 4 — storefront checkout path).
 
 ## Operational risk: HIGH
 

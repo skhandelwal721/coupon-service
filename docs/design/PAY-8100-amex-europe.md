@@ -2,7 +2,7 @@
 
 **Change:** add **AMEX** as a payment option for customers in **Europe**, as part of the
 payments flow.
-**Service:** coupon-service (Tier 1 — storefront checkout path).
+**Service:** coupon-service (Tier 4 — storefront checkout path).
 
 ## Summary
 

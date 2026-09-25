@@ -13,7 +13,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * A micro-benchmark for the €20 Netherlands discount hot path — COUPON-573.
  *
- * <p>coupon-service is Tier 1 and sits on the storefront checkout path, so the per-redemption
+ * <p>coupon-service is Tier 4 and sits on the storefront checkout path, so the per-redemption
  * work that the new flow adds — resolving the coupon, evaluating the country restriction, and
  * computing the minor-unit discount — has to be cheap and constant. This test exercises exactly
  * that path in a tight loop and asserts a throughput floor and a per-operation latency ceiling,

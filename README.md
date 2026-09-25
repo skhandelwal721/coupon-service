@@ -1,7 +1,7 @@
 # coupon-service
 
-Promotional coupons and redemption reconciliation for Beacon Stone Retail. Tier 1 — this sits on
-the storefront checkout path, and every redemption it books is money off a real invoice.
+Promotional coupons and redemption reconciliation for Beacon Stone Retail. Tier 4 in the Beacon
+Stone platform catalogue.
 
 ## Responsibilities
 
